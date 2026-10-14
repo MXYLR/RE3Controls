@@ -1,0 +1,33 @@
+#pragma once
+#include <stdint.h>
+
+// Free orbit camera shared between the input layer (game thread, cPad update) and the QFPS camera hook.
+// Outside the aim the mod draws its own RE3-style orbit camera; aiming and the game's own look-at cameras stay
+// the game's, with a short blend in between.
+struct FreeCam {
+    uint32_t character = 0;  // local player the camera belongs to
+    float yaw = 0;           // world yaw the camera looks along (radians, same convention as the character)
+    float pitch = 0;         // radians, + = looking down (camera above the shoulder), - = looking up
+    bool leftShoulder = false;  // camera over the left shoulder
+    bool active = false;     // the orbit camera runs this frame (not aiming, free camera on)
+    bool initialised = false;
+    bool noAimRig = false;   // reloading on the move: keep the normal camera while the gun is up
+    double lastCameraUpdate = 0;
+    double activeTime = 0;   // Mode=MeleeCamera: when the input layer last asked for the orbit (stale = vanilla)
+};
+
+// Each local player has a free camera of their own (split screen: each player has their own camera controller),
+// by the player's slot (ch+NetSlot).
+FreeCam& CamFor(uint32_t character);
+// The character is the one its free camera was last driven for (a local player under the mod's controls).
+bool IsCamCharacter(uint32_t character);
+void InitCameraHooks();
+float DefaultCameraPitch();  // radians, from the ini
+
+// yaw helpers: forward = (sin yaw, 0, cos yaw), right = (-cos yaw, 0, sin yaw)
+// World facing of a character (on a moving boat or platform: its own yaw plus the platform's heading).
+float CharacterYaw(uint32_t character);
+void SetCharacterYaw(uint32_t character, float yaw);
+// World position of a character (Pos is relative to the platform while it stands on one).
+void CharacterWorldPos(uint32_t character, float* out);
+float WrapPi(float a);
