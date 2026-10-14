@@ -78,3 +78,9 @@ that code is in the published DLL.
 | `src/devserver.cpp`, `src/devinput.cpp`, `src/d3d9_hook.cpp` | Developer test tooling only (see above) |
 | `docs/` | The user READMEs shipped in the release archive (`@SHA256@` is filled in when packaging) |
 | `third_party/minhook/` | MinHook 1.3.4 |
+
+## Licence
+
+RE3Controls is released under the [MIT License](LICENSE): you may use, change and share this code, also in your own
+mods, as long as the copyright notice stays with it. `third_party/minhook/` keeps its own BSD 2-clause licence
+(`third_party/minhook/LICENSE.txt`).
