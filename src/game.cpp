@@ -199,16 +199,27 @@ struct ControlsState {
     uint32_t runSig = 0;        // the canonical button this run uses (A; L3 without the free camera in types C/D)
     bool kbRunPress = false;    // keyboard: the run key went down while moving (in the inventory it runs, no confirm)
 };
-static ControlsState g_states[4];
+static ControlsState g_states[8];
 
 static ControlsState& StateFor(uint32_t pad) {
     for (auto& s : g_states)
         if (s.pad == pad) return s;
+    // A pad object seen for the first time (new game, chapter restart). Nothing releases the entries of pad objects
+    // that are gone, so the table fills up over restarts (two entries per restart in split screen). Take a free
+    // entry or, when there is none, the one unused for longest. Always reusing one fixed entry made the two local
+    // players take it from each other every frame: their state started from scratch each time (no frame time, no
+    // run toggle, no steering).
+    ControlsState* slot = nullptr;
     for (auto& s : g_states)
-        if (!s.pad) { s = ControlsState{}; s.pad = pad; return s; }
-    g_states[0] = ControlsState{};
-    g_states[0].pad = pad;
-    return g_states[0];
+        if (!s.pad) { slot = &s; break; }
+    if (!slot) {
+        slot = &g_states[0];
+        for (auto& s : g_states)
+            if (s.last < slot->last) slot = &s;
+    }
+    *slot = ControlsState{};
+    slot->pad = pad;
+    return *slot;
 }
 
 bool GunAimHeld(uint32_t character) {
@@ -509,15 +520,18 @@ static void ApplyControls(uint32_t padObj, uint32_t character) {
     // device each one plays with).
     FreeCam& fc = CamFor(character);
     fc.character = character;
-    const bool freeCam = c.freeCamera;
+    // ch+0x2D8C: 0x4000 riding something, with 0x80 a gun emplacement, 0x40 the jeep gun, 0x20 the airboat driver
+    // (the airboat passenger has only 0x4000 and keeps the mod's controls).
+    const uint32_t ride = At<uint32_t>(character, 0x2D8C);
+    // Low cover and wall cover (0x100, 0x200, 0x400, 0x800): the game's own camera and sticks, as with FreeCamera=0
+    // (the camera follows the game's own, the sticks move and aim as the game does them).
+    const bool covered = (ride & 0xF00) != 0;
+    const bool freeCam = c.freeCamera && !covered;
 
     // The in-game inventory reads this pad with the player's own button layout (A = item menu, RB = partner's
     // items): while it is open the game's buttons are left alone. With KeyboardMouse=0 keyboard/mouse play is left to
     // the game entirely (its own camera too). On a mounted gun or a vehicle gun the game's own controls apply.
     const uint32_t idNow = At<uint32_t>(character, ch::ActionId);
-    // ch+0x2D8C: 0x4000 riding something, with 0x80 a gun emplacement, 0x40 the jeep gun, 0x20 the airboat driver
-    // (the airboat passenger has only 0x4000 and keeps the mod's controls).
-    const uint32_t ride = At<uint32_t>(character, 0x2D8C);
     const bool mounted = ((ride & 0x4000) && (ride & 0xE0)) || (idNow >= 0x6A && idNow <= 0x6E);
     const bool dash = c.weskerDash && IsDash(idNow);  // Wesker's dash: the game's controls and camera
 #if RE3C_DEV
@@ -597,6 +611,7 @@ static void ApplyControls(uint32_t padObj, uint32_t character) {
         out = on;
         fc.leftShoulder = false;  // no swap button in the original layout
     }
+    if (covered) fc.leftShoulder = false;  // the game's own cover camera must not be mirrored
     S.character = character;
     S.gunAim = c.remapButtons ? (aiming && !knifeWins) : (on & P_RT) != 0;
 
@@ -743,9 +758,6 @@ static void ApplyControls(uint32_t padObj, uint32_t character) {
     const bool busy = aimHeld || dash || (S.reload != ReloadPhase::Idle && !reloadMove);
     bool snapNow = false;
     bool backStep = false;  // BackStep: this frame steps back toward the camera
-    // Crouched behind low cover the right stick (keyboard: the mouse) also turns the crouch, as in the game
-    // (CoverTurn); the camera turns with it.
-    const bool lowCover = freeCam && c.coverTurn && (ride & 0x100) && !(ride & 0x200);
     if (freeCam) {
         // Aim where you look: raising the gun or knife turns the character to the camera, only where the game lets it
         // aim any way (free locomotion, lowering the gun or knife, a reload or a weapon switch, which go straight on
@@ -803,13 +815,10 @@ static void ApplyControls(uint32_t padObj, uint32_t character) {
                 fc.yaw = CharacterYaw(character);
                 fc.pitch = DefaultCameraPitch();
             }
-            // The game must not turn the character with the right stick any more (crouched behind low cover it
-            // turns the crouch, as in the game).
-            if (!lowCover) {
-                At<float>(padObj, pp::RAngle) = 0;
-                At<float>(padObj, pp::RMag) = 0;
-                out &= ~P_RS_DIRS;
-            }
+            // The game must not turn the character with the right stick any more.
+            At<float>(padObj, pp::RAngle) = 0;
+            At<float>(padObj, pp::RMag) = 0;
+            out &= ~P_RS_DIRS;
             // Only once the reload has started (a refused request leaves the walk as it is).
             const bool moveSteer = (reloadMove && c.reloadWalk && action == plact::Reload) || changeMove;
             if (stickMag >= 0.3f && fc.initialised && S.quickTurnT < 0 && (InLocomotion(character) || moveSteer)) {
@@ -853,10 +862,9 @@ static void ApplyControls(uint32_t padObj, uint32_t character) {
             lMag = stickMag > 1.0f ? 1.0f : stickMag;
             stickSet = true;
         }
-        // With the free camera the game's own mouse turning of the body is off (it steers Wesker's dash, and behind
-        // low cover it turns the crouch); outside the aim the mouse belongs to the camera, in the aim the game's
-        // mouse aim gets it (scaled by MouseSensitivity).
-        if (orbit && !dash && !lowCover) {
+        // With the free camera the game's own mouse turning of the body is off (it steers Wesker's dash); outside the
+        // aim the mouse belongs to the camera, in the aim the game's mouse aim gets it (scaled by MouseSensitivity).
+        if (orbit && !dash) {
             At<float>(padObj, 0x200) = 0.0f;
             At<float>(padObj, 0x204) = 0.0f;
         }
@@ -866,7 +874,7 @@ static void ApplyControls(uint32_t padObj, uint32_t character) {
         } else if (orbit && !dash) {
             At<float>(padObj, 0x20C) = 0.0f;
             At<float>(padObj, 0x210) = 0.0f;
-            if (!lowCover) KbSyncTargetYaw(character);  // keep the game's own turn target on the facing the mod set
+            KbSyncTargetYaw(character);  // keep the game's own turn target on the facing the mod set
         }
         if (snapNow && orbit) KbSyncTargetYaw(character);  // the game's mouse aim starts from the new facing
     }
@@ -993,7 +1001,7 @@ static void ApplyControls(uint32_t padObj, uint32_t character) {
     Bridge()->reserved[3] = character;
     Bridge()->reserved[4] = (uint32_t)S.reload | (reloadMove ? 0x10 : 0) | (S.aimFast ? 0x100 : 0) |
                             (aimWalking ? 0x1000 : 0) | (S.runToggled ? 0x10000 : 0);
-    Bridge()->reserved[31] = (dash ? 1u : 0u) | (knifeWins ? 2u : 0u) | (lowCover ? 4u : 0u) |
+    Bridge()->reserved[31] = (dash ? 1u : 0u) | (knifeWins ? 2u : 0u) |
                              (S.snapPending ? 8u : 0u) | (S.runSig == P_L3 ? 0x10u : 0u) | (S.tauntL3 ? 0x20u : 0u) |
                              (S.bHeldFromTurn ? 0x40u : 0u) | (snapNow ? 0x80u : 0u);
 #endif
@@ -1106,9 +1114,13 @@ static void __fastcall HookPlayerPadUpdate(uint32_t self, void* edx) {
     UpdateColorFilter();
     uint32_t character = 0;
     if (IsLocalPlayerPad(self, &character)) {
-        InventoryPadUpdated(self);
-        InstallRawHoldPatches();
-        if (Cfg().enabled) {
+        const Config& cfg = Cfg();
+        // Inventory pad rewrite and raw-hold patches are only needed in full control modes.
+        if (cfg.enabled && !cfg.meleeOnly) {
+            InventoryPadUpdated(self);
+            InstallRawHoldPatches();
+        }
+        if (cfg.enabled) {
             ApplyControls(self, character);
 #if RE3C_DEV
             if (DevMode()) DevExperiments(character);
@@ -1116,7 +1128,8 @@ static void __fastcall HookPlayerPadUpdate(uint32_t self, void* edx) {
         } else {
             AimWalkUpdate(character, 0.0f, 0.0f, false, 0.0f, 0.0f);  // turned off mid-walk: the legs stop
         }
-        AimWalkRemoteTick();  // partner copies whose packets stopped (left, Sync=0, no pad here) stop walking
+        // Remote leg-layer smoothing is free when Sync is off / no remote layers are live.
+        if (cfg.coopSync) AimWalkRemoteTick();
     }
 }
 

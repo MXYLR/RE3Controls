@@ -1,9 +1,9 @@
-# RE3Controls v1.9 for Resident Evil 5: source code
+# RE3Controls v1.9.4 for Resident Evil 5: source code
 
 RE3Controls is a Resident Evil 5 mod that brings in Resident Evil 3 (2020) style controls: a free over-the-shoulder
 camera, camera-relative movement, walking while aiming, a centred crosshair, one-button reload on the move, quick
-turn, full keyboard/mouse support and more. This package is the complete source of the `xinput1_3.dll` published on
-Nexus Mods as **RE3Controls v1.9**.
+turn, full keyboard/mouse support and more. This package is the source of **v1.9.4**, a modified version of
+RE3Controls v1.9 (the `xinput1_3.dll` published on Nexus Mods). `OPTIMIZATIONS.md` lists the changes.
 
 Target: **Resident Evil 5 Gold Edition, Steam, version 1.2.0** (`re5dx9.exe`, 32-bit). The mod uses fixed addresses of
 that build and checks the code bytes at each address before it hooks or patches anything; on any other build it
@@ -19,8 +19,9 @@ bash build.sh                          # release build -> build/xinput1_3.dll
 ZIG=/path/to/zig.exe bash build.sh     # if zig is not on PATH
 ```
 
-The build is reproducible. Built with zig 0.17.0, `build/xinput1_3.dll` is byte-identical to the DLL in the Nexus
-archive `RE5_RE3Controls_v1.9.zip`:
+The build is reproducible. Built with zig 0.17.0, the unmodified v1.9 source gives a `build/xinput1_3.dll`
+byte-identical to the DLL in the Nexus archive `RE5_RE3Controls_v1.9.zip` (this modified source builds a different
+DLL):
 
 ```
 SHA-256  E104CC826D1EA70E1AF4464C85F3BD5D09621F70BDC529FD1F5C154A43EE7CA6   (217 088 bytes)
@@ -74,7 +75,7 @@ that code is in the published DLL.
 | `src/damage.cpp`, `src/balance.cpp` | Optional damage, fire rate, move speed, shotgun spread, colour filter |
 | `src/net.cpp` | Co-op sync packets |
 | `src/re5.h`, `src/common.h` | Game structure offsets and helpers |
-| `src/version.rc` | Version resource (1.9.0.0) |
+| `src/version.rc` | Version resource (1.9.4.0) |
 | `src/devserver.cpp`, `src/devinput.cpp`, `src/d3d9_hook.cpp` | Developer test tooling only (see above) |
 | `docs/` | The user READMEs shipped in the release archive (`@SHA256@` is filled in when packaging) |
 | `third_party/minhook/` | MinHook 1.3.4 |

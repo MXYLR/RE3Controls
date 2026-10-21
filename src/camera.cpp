@@ -27,7 +27,11 @@ using namespace re5;
 static FreeCam g_cams[4];  // by player slot
 FreeCam& CamFor(uint32_t character) { return g_cams[At<uint8_t>(character, ch::NetSlot) & 3]; }
 bool IsCamCharacter(uint32_t character) {
-    return character && Readable((void*)character, 0x3000) && CamFor(character).character == character;
+    // Check known camera slots first so we almost never VirtualQuery random addresses.
+    if (!character) return false;
+    for (int i = 0; i < 4; ++i)
+        if (g_cams[i].character == character) return Readable((void*)character, 0x3000);
+    return false;
 }
 
 static inline float Rad(float deg) { return deg * 0.01745329252f; }
@@ -352,8 +356,12 @@ static int OurCamera(uint32_t q) {
 // uCameraCtrl::update: it picks the lag-camera mode from the aim flag before running the QFPS update, so the mod's
 // reload-on-the-move clears the flag here (the character raised the gun without the player aiming).
 static void __fastcall HookCtrlUpdate(uint32_t ctrl, void* edx, uint32_t dt) {
-    const int idx = OurCamera(ctrl + 0xE00);
-    if (idx >= 0 && g_cams[idx].noAimRig && Cfg().freeCamera) At<uint8_t>(ctrl, 0xE00 + cam::AimRig) = 0;
+    const Config& c = Cfg();
+    // noAimRig only matters with the full free camera; MeleeCamera never sets it.
+    if (c.enabled && c.freeCamera && !c.meleeOnly) {
+        const int idx = OurCamera(ctrl + 0xE00);
+        if (idx >= 0 && g_cams[idx].noAimRig) At<uint8_t>(ctrl, 0xE00 + cam::AimRig) = 0;
+    }
     oCtrlUpdate(ctrl, edx, dt);
 }
 
@@ -395,6 +403,10 @@ static void AimTracking(uint32_t q, int idx) {
 
 static void __fastcall HookQfpsUpdate(uint32_t self, void* edx, uint32_t arg) {
     const Config& c = Cfg();
+    if (!c.enabled) {
+        oQfpsUpdate(self, edx, arg);
+        return;
+    }
     const int idx = OurCamera(self);
     if (!(c.freeCamera || c.meleeOnly) || idx < 0) {
         // Other characters' cameras (the online partner's) update too: only a camera losing its orbit (or the orbit
@@ -414,8 +426,6 @@ static void __fastcall HookQfpsUpdate(uint32_t self, void* edx, uint32_t arg) {
     }
     FreeCam& fc = g_cams[idx];
     OrbitState& o = g_orbits[idx];
-    o.camera = self;
-    if (fc.noAimRig) At<uint8_t>(self, cam::AimRig) = 0;
     // Looking at the partner (locate-partner button, co-op action points): the game turns the camera.
     const bool lookAt = At<uint8_t>(self, cam::LookAt) || At<uint8_t>(self, cam::LookAt + 1);
     // Mode=MeleeCamera: the orbit runs during melee attacks, then turns back toward where the game's camera looks
@@ -441,7 +451,33 @@ static void __fastcall HookQfpsUpdate(uint32_t self, void* edx, uint32_t arg) {
             o.returnStart = tNow;
             if (DevMode()) Log("dev: melee camera returning");
         }
+        // Fast path: MeleeCamera and the orbit is idle. Skip pose mirror, FollowPlatform, Orbit, blends.
+        // Still run the game's camera and keep a light track of its yaw/pitch so the next melee starts clean.
+        if (!active && !o.returning && o.blendStart < 0 && !lookAt) {
+            o.camera = self;
+            oQfpsUpdate(self, edx, arg);
+            float* eye = (float*)(self + cam::EyeAim);
+            float* tgt = (float*)(self + cam::TargetAim);
+            const float dx = tgt[0] - eye[0], dz = tgt[2] - eye[2];
+            if (dx * dx + dz * dz >= 1.0f) {
+                fc.yaw = atan2f(dx, dz);
+                const float len = sqrtf(dx * dx + dz * dz);
+                float pitch = atan2f(eye[1] - tgt[1], len);
+                if (pitch > Rad(55.0f)) pitch = Rad(55.0f);
+                if (pitch < Rad(-40.0f)) pitch = Rad(-40.0f);
+                fc.pitch = pitch;
+                fc.initialised = true;
+                fc.lastCameraUpdate = tNow;
+                memcpy(o.lastEye, eye, 12);
+                memcpy(o.lastTgt, tgt, 12);
+                o.haveLast = true;
+                o.lastOwn = false;
+            }
+            return;
+        }
     }
+    o.camera = self;
+    if (fc.noAimRig) At<uint8_t>(self, cam::AimRig) = 0;
     const bool own = (active || (c.meleeOnly && o.returning)) && !lookAt && At<uint8_t>(self, cam::AimRig) == 0;
     if (!own) o.returning = false;
     uint8_t lookEnabled = 0;

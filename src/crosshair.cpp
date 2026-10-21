@@ -45,6 +45,11 @@ constexpr uint32_t ChCursor = 0x2910;    // float2, mouse cursor; the type-3 ret
 // uLaserSight colours: own beam, dot, dot glow (vector4 each)
 constexpr uint32_t kLaserColors[3] = {0x270, 0x2A0, 0x2C0};
 const float kLaserDefaults[3][4] = {{2.0f, 0, 0, 1.0f}, {1.0f, 0, 0, 0.2f}, {1.0f, 0, 0, 0.186f}};
+// The laser object holds more red colour entries in the same table (0x250..0x2C0, 16 bytes each). With only the three
+// above hidden the beam was still drawn at its start (2 cm at the barrel tip in a lit place) and, in a dark place,
+// as a long white beam.
+constexpr uint32_t kLaserExtra[4] = {0x250, 0x260, 0x280, 0x2B0};
+const float kLaserExtraDefaults[4][4] = {{1.3f, 0, 0, 1.0f}, {1.3f, 0, 0, 1.0f}, {1.3f, 0, 0, 1.0f}, {1.2f, 0, 0, 0}};
 
 constexpr uint32_t kFnLaserRaycast = 0x00B68E10;  // thiscall(ch) -> 0 none, 1 enemy shape, 2 prop, 3 static
 constexpr uint32_t kFnCameraAimRay = 0x00B69280;  // thiscall(ch) -> same codes for the camera ray; sets 0x2700
@@ -64,22 +69,34 @@ struct AimInfo {
     int hit = 0;          // what the camera aim ray hit (0 none, 1 enemy, 2 prop, 3 static)
     uint32_t weapon = 0;  // inventory entry of the gun in hand, and its rounds last frame
     int rounds = -1;
+    uint32_t used = 0;    // GetTickCount() of the last lookup
 };
-AimInfo g_aim[4];
+AimInfo g_aim[8];
 
+// Entries of characters that are gone are never released, so the table fills up over restarts. Take a free entry or
+// else the one unused for longest; reusing one fixed entry made two local players take it from each other.
 AimInfo& AimFor(uint32_t ch) {
+    const uint32_t now = GetTickCount();
     for (auto& a : g_aim)
-        if (a.ch == ch) return a;
+        if (a.ch == ch) { a.used = now; return a; }
+    AimInfo* slot = nullptr;
     for (auto& a : g_aim)
-        if (!a.ch) { a.ch = ch; return a; }
-    g_aim[0] = AimInfo{};
-    g_aim[0].ch = ch;
-    return g_aim[0];
+        if (!a.ch) { slot = &a; break; }
+    if (!slot) {
+        slot = &g_aim[0];
+        for (auto& a : g_aim)
+            if ((uint32_t)(now - a.used) > (uint32_t)(now - slot->used)) slot = &a;
+    }
+    *slot = AimInfo{};
+    slot->ch = ch;
+    slot->used = now;
+    return *slot;
 }
 
 struct HiddenLaser {
     uint32_t laser = 0;
     float saved[3][4];
+    float savedX[4][4];
 };
 HiddenLaser g_hidden[4];
 
@@ -106,7 +123,10 @@ bool KbCrosshair(uint32_t ch) {
 
 void Restore(HiddenLaser& h) {
     if (IsLaser(h.laser))
+    {
         for (int i = 0; i < 3; ++i) memcpy((void*)(h.laser + kLaserColors[i]), h.saved[i], 16);
+        for (int i = 0; i < 4; ++i) memcpy((void*)(h.laser + kLaserExtra[i]), h.savedX[i], 16);
+    }
     h.laser = 0;
 }
 
@@ -125,8 +145,14 @@ void HideLaser(uint32_t laser) {
             const float* s = h->saved[i];
             if (s[0] == 0 && s[1] == 0 && s[2] == 0) memcpy(h->saved[i], kLaserDefaults[i], 16);
         }
+        for (int i = 0; i < 4; ++i) {
+            memcpy(h->savedX[i], (void*)(laser + kLaserExtra[i]), 16);
+            const float* s = h->savedX[i];
+            if (s[0] == 0 && s[1] == 0 && s[2] == 0) memcpy(h->savedX[i], kLaserExtraDefaults[i], 16);
+        }
     }
     for (int i = 0; i < 3; ++i) memset((void*)(laser + kLaserColors[i]), 0, 16);
+    for (int i = 0; i < 4; ++i) memset((void*)(laser + kLaserExtra[i]), 0, 16);
 }
 
 void ShowLaser(uint32_t laser) {
@@ -237,6 +263,22 @@ bool CrosshairOn(uint32_t ch) {
            GunUp(ch) && !At<uint8_t>(ch, ChScope) && Rd(ch + ChAimRayObj) != 0 && PlainGun(ch);
 }
 
+// The game keeps the barrel line next to the shot point every frame: start ch+0x2710 (the barrel tip), end ch+0x2720
+// (where the barrel line hits, or a far point), copied into the laser object at +0x210/+0x220 for the beam.
+// The grenade launcher (item 0x10C) does not fly toward the shot point ch+0x2700 like bullets do, nor along that
+// line's end: it leaves along the barrel itself, which points up and to the left of the camera ray (about 8 and 5
+// degrees in the logs). So its crosshair is drawn where the barrel line ends, which is where the grenade goes.
+constexpr uint32_t kItemGrenadeLauncher = 0x10C;
+constexpr uint32_t ChLaserStart = 0x2710;
+constexpr uint32_t ChLaserEnd = 0x2720;
+float g_barrel[3] = {};     // the launcher's barrel hit of the last laser raycast
+uint32_t g_barrelCh = 0;
+bool LauncherInHand(uint32_t ch) {
+    uint32_t entry = 0;
+    int rounds = 0;
+    return GunInHand(ch, &entry, &rounds) && Rd(entry + 4) == kItemGrenadeLauncher;
+}
+
 // The camera aim ray: what it hits colours the crosshair.
 int __fastcall HookCameraAimRay(uint32_t ch, void* edx) {
     const int r = oCameraAimRay(ch, edx);
@@ -268,6 +310,23 @@ int __fastcall HookLaserRaycast(uint32_t ch, void* edx) {
     memcpy(shot, (void*)(ch + ChShot), 12);
     oLaserRaycast(ch, edx);
     memcpy((void*)(ch + ChShot), shot, 12);
+    const float* start = (const float*)(ch + ChLaserStart);
+    float* end = (float*)(ch + ChLaserEnd);
+    if (LauncherInHand(ch)) {
+        // Where the barrel line ends: the grenade goes there, so the crosshair is drawn there (HookReticle).
+        memcpy(g_barrel, end, 12);
+        g_barrelCh = ch;
+    }
+    // The beam is drawn from that line, in dark places too, where hiding its colours is not enough (a long white
+    // beam to the left of the crosshair). Keep its direction and make it half a millimetre long. Bullets and the
+    // grenade do not read it.
+    const float d[3] = {end[0] - start[0], end[1] - start[1], end[2] - start[2]};
+    const float len = sqrtf(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
+    if (len > 1.0f) {
+        for (int i = 0; i < 3; ++i) end[i] = start[i] + d[i] / len * 0.05f;
+        const uint32_t laser = Rd(ch + ChLaser);
+        if (IsLaser(laser)) memcpy((void*)(laser + 0x220), end, 12);
+    }
     return 0;
 }
 
@@ -275,6 +334,8 @@ void __fastcall HookReticle(uint32_t cockpit, void* edx) {
     g_reticleScale = 1.5f;  // the game's crosshair (another player's, the mouse cursor style) keeps its size
     g_reticleSpread = 15.0f;
     const uint32_t ch = Rd(cockpit + CkCharacter);
+    uint32_t aimCh = 0;  // the character whose crosshair point is moved for this draw (grenade launcher)
+    float aimSaved[3] = {};
     if (ch && Readable((void*)ch, 0x3000) && Rd(ch + ch::NetControl) == 0 && Rd(ch + ChCockpit) == cockpit) {
         const Config& c = Cfg();
         const uint32_t laser = Rd(ch + ChLaser);
@@ -283,6 +344,12 @@ void __fastcall HookReticle(uint32_t cockpit, void* edx) {
             HideLaser(laser);
             if (CrosshairOn(ch)) {
                 At<uint8_t>(cockpit, CkColour) = AimFor(ch).hit == 1 ? 2 : 1;
+                if (g_barrelCh == ch && LauncherInHand(ch)) {
+                    // Grenade launcher: the crosshair sits where the barrel line ends, for this draw only.
+                    memcpy(aimSaved, (void*)(ch + ChAimPoint), 12);
+                    memcpy((void*)(ch + ChAimPoint), g_barrel, 12);
+                    aimCh = ch;
+                }
                 // The game's own spread on a shot (0xB5B160, the same for both devices) is none for handguns.
                 KickOnShot(ch, cockpit);
                 // CrosshairKick=0: no opening at all, also not the game's own for shotguns and magnums (its fire
@@ -315,6 +382,7 @@ void __fastcall HookReticle(uint32_t cockpit, void* edx) {
         }
     }
     oReticle(cockpit, edx);
+    if (aimCh) memcpy((void*)(aimCh + ChAimPoint), aimSaved, 12);
 }
 
 // The character's reticle request (thiscall(character), plain ret; called by the gun actions and the knife actions):
@@ -357,7 +425,6 @@ PFN_PadAim oPadAim = nullptr;
 constexpr uint32_t kParamPtr = 0x011B27B4;    // sParameter
 constexpr uint32_t kOptionsPtr = 0x012340A4;  // +0x1042C: per-player options (stride 0xF4)
 constexpr uint32_t kFnControlType = 0x00C42960;  // thiscall(options, player) -> 0..3 = control type A..D
-constexpr uint32_t ChStateBits = 0x2D8C;      // 0x400: wall cover (the game lets the arms reach further there)
 
 // Types B and D aim with the right stick (the 4 floats are left angle/magnitude, right angle/magnitude).
 bool AimWithRightStick(uint32_t ch) {
@@ -376,7 +443,9 @@ void __fastcall HookPadAim(uint32_t padEx, void* edx, uint32_t ch, float a, floa
     // (+0x4B4, up to 7 degrees) and catches up in steps, which shows as trembling; the same direct turn as on the pad.
     const bool kbAim = cfg.enabled && padEx && Readable((void*)padEx, 0x4E8) && ch && Readable((void*)ch, 0x3000) &&
                        Rd(ch + ch::NetControl) == 0 && KbCrosshair(ch);
-    const bool direct = (localPad || kbAim) && cfg.directHorizontal && CrosshairOn(ch) && !(Rd(ch + ChStateBits) & 0x400);
+    // Also in wall cover: the arm zone (+0x4B4) is wider there, and its sway made the crosshair wait for the stick to
+    // get past it before the aim moved.
+    const bool direct = (localPad || kbAim) && cfg.directHorizontal && CrosshairOn(ch);
     const uint32_t prm = localPad && (cfg.aimSpeedX != 1.0f || cfg.aimSpeedY != 1.0f) ? Rd(kParamPtr) : 0;
     const bool scale = prm && Readable((void*)(prm + 0x2D0), 8);
     float pitchRate = 0.0f, yawRate = 0.0f;

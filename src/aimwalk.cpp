@@ -444,29 +444,43 @@ typedef void(__fastcall* PFN_MotionUpdate)(uint32_t model, void* edx);
 static PFN_MotionUpdate oMotionUpdate = nullptr;
 static const uint32_t kFnMotionUpdateThunk = 0x008305A0;  // jmp 0x59D0B0
 
+static bool AnyLayerBusy() {
+    for (const auto& L : g_layers)
+        if (L.active || L.k > 0.0f || L.saveValid || L.remote) return true;
+    return false;
+}
+
 static void __fastcall HookMotionUpdate(uint32_t model, void* edx) {
-    for (auto& L : g_layers) {
-        if (L.ch != model || !L.saveValid) continue;
-        L.saveValid = false;
-        const uint32_t joints = At<uint32_t>(model, 0x318);
-        const uint32_t count = At<uint32_t>(model, 0x314);
-        if (joints != L.saveJoints || L.pelvis < 0 || (count > 256 ? 256 : count) != L.jointCount ||
-            !Readable((void*)joints, L.jointCount * 0x90) || At<uint8_t>(joints, L.pelvis * 0x90 + 7) != 0x0F ||
-            (L.spine1 >= 0 && (At<uint8_t>(joints, L.spine1 * 0x90 + 7) != 0x01 ||
-                               At<uint8_t>(joints, L.spine2 * 0x90 + 7) != 0x02)) ||
-            !IsPlayerCharacter(model) || (DevMode() && (Bridge()->reserved[24] & 256)))
+    // Runs on every model motion update. Skip the layer scan when nothing is walking.
+    if (g_restoreHook && AnyLayerBusy()) {
+        for (auto& L : g_layers) {
+            if (L.ch != model || !L.saveValid) continue;
+            L.saveValid = false;
+            const uint32_t joints = At<uint32_t>(model, 0x318);
+            const uint32_t count = At<uint32_t>(model, 0x314);
+            if (joints != L.saveJoints || L.pelvis < 0 || (count > 256 ? 256 : count) != L.jointCount ||
+                !Readable((void*)joints, L.jointCount * 0x90) || At<uint8_t>(joints, L.pelvis * 0x90 + 7) != 0x0F ||
+                (L.spine1 >= 0 && (At<uint8_t>(joints, L.spine1 * 0x90 + 7) != 0x01 ||
+                                   At<uint8_t>(joints, L.spine2 * 0x90 + 7) != 0x02)) ||
+                !IsPlayerCharacter(model) || (DevMode() && (Bridge()->reserved[24] & 256)))
+                break;
+            memcpy((void*)(joints + L.pelvis * 0x90 + 0x20), L.savePelvis, 16);
+            if (L.spine1 >= 0) {
+                memcpy((void*)(joints + L.spine1 * 0x90 + 0x20), L.saveS1, 16);
+                memcpy((void*)(joints + L.spine2 * 0x90 + 0x20), L.saveS2, 16);
+            }
             break;
-        memcpy((void*)(joints + L.pelvis * 0x90 + 0x20), L.savePelvis, 16);
-        if (L.spine1 >= 0) {
-            memcpy((void*)(joints + L.spine1 * 0x90 + 0x20), L.saveS1, 16);
-            memcpy((void*)(joints + L.spine2 * 0x90 + 0x20), L.saveS2, 16);
         }
-        break;
     }
     oMotionUpdate(model, edx);
 }
 
 static void __fastcall HookBlend(uint32_t model, void* edx) {
+    // Runs on every model blend in the game. Bail out before scanning when no leg layer is live.
+    if (!AnyLayerBusy()) {
+        oBlend(model, edx);
+        return;
+    }
     LegLayer* layer = nullptr;
     uint32_t shield[2] = {};  // slots 7 and 6 of a walking layer, marked as fading for this blend (see below)
     float shieldFade[2] = {}, shieldFactor[2] = {};

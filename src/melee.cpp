@@ -32,9 +32,9 @@ PFN_Pawn oUpdateActionCamera = nullptr;
 
 void __fastcall HookUpdateActionCamera(uint32_t pawn, void* edx) {
     const Config& c = Cfg();
-    if (c.enabled && (c.freeCamera || c.meleeOnly) && pawn && IsCamCharacter(pawn) &&
-        Readable((void*)pawn, 0x3000) && At<uint32_t>(pawn, ch::NetControl) == 0 &&
-        (At<uint16_t>(pawn, PawnMotionState) & 2) && FreeCameraAction(pawn) &&
+    // Cheap gates first: most frames are not starting a motion on a local camera character.
+    if (c.enabled && (c.freeCamera || c.meleeOnly) && pawn && (At<uint16_t>(pawn, PawnMotionState) & 2) &&
+        IsCamCharacter(pawn) && At<uint32_t>(pawn, ch::NetControl) == 0 && FreeCameraAction(pawn) &&
         (!KbMouse(pawn) || KbLayerFor(pawn)))
         At<uint8_t>(pawn, PawnSkipActionCamera) = 1;
     oUpdateActionCamera(pawn, edx);
@@ -118,7 +118,10 @@ bool InEnemyGrab(uint32_t pawn) {
 
 bool FreeCameraAction(uint32_t pawn) {
     const Config& c = Cfg();
-    return (c.meleeCamera && IsMeleeAction(At<uint32_t>(pawn, ch::ActionId))) || (c.grabCamera && InEnemyGrab(pawn));
+    // Melee action id is a single int compare; only walk enemy-grab DTI tables when GrabCamera is on.
+    if (c.meleeCamera && IsMeleeAction(At<uint32_t>(pawn, ch::ActionId))) return true;
+    if (c.grabCamera && InEnemyGrab(pawn)) return true;
+    return false;
 }
 
 void InitMeleeHooks() {
