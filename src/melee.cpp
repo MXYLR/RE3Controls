@@ -29,14 +29,20 @@ constexpr uint32_t PawnSkipActionCamera = 0x10C1;      // u8, one-shot: the next
 
 typedef void(__fastcall* PFN_Pawn)(uint32_t pawn, void* edx);
 PFN_Pawn oUpdateActionCamera = nullptr;
-
+// The game's action camera is what locks the view during a quick knife slash; while the mod owns the camera we set
+// this one-shot flag so the new motion gets no action camera.
 void __fastcall HookUpdateActionCamera(uint32_t pawn, void* edx) {
     const Config& c = Cfg();
     if (c.enabled && (c.freeCamera || c.meleeOnly) && pawn && IsCamCharacter(pawn) &&
         Readable((void*)pawn, 0x3000) && At<uint32_t>(pawn, ch::NetControl) == 0 &&
-        (At<uint16_t>(pawn, PawnMotionState) & 2) && FreeCameraAction(pawn) &&
-        (!KbMouse(pawn) || KbLayerFor(pawn)))
-        At<uint8_t>(pawn, PawnSkipActionCamera) = 1;
+        (At<uint16_t>(pawn, PawnMotionState) & 2) && FreeCameraAction(pawn)) {
+        // The keyboard/mouse gate that used to be required here (KbLayerFor) kept the action camera for players
+        // whose KB layer was not active that frame, which is exactly when the slash felt locked.  For a knife action
+        // the mod wants the camera in any case.
+        const uint32_t id = At<uint32_t>(pawn, ch::ActionId);
+        if (!KbMouse(pawn) || KbLayerFor(pawn) || (id >= aid::KnifeBegin && id <= aid::KnifeAttack))
+            At<uint8_t>(pawn, PawnSkipActionCamera) = 1;
+    }
     oUpdateActionCamera(pawn, edx);
 }
 
@@ -118,7 +124,16 @@ bool InEnemyGrab(uint32_t pawn) {
 
 bool FreeCameraAction(uint32_t pawn) {
     const Config& c = Cfg();
-    return (c.meleeCamera && IsMeleeAction(At<uint32_t>(pawn, ch::ActionId))) || (c.grabCamera && InEnemyGrab(pawn));
+    const uint32_t id = At<uint32_t>(pawn, ch::ActionId);
+    // With the free camera on, the mod owns the view for EVERY attack, not for a list of ids that has to be right.
+    // The old rule named only the knife attack id (0x27) and, before that, only 0x30-0x4D, so whether the view stayed
+    // free depended on which id the game happened to start; that is why the quick knife could not be turned.  This
+    // range covers the knife stance/attacks (0x22-0x27) and the attack_* family (0x30-0x4D, incl. the co-op help
+    // attack 0x6F and the two em10 attacks), and nothing else: taunt (0x2F), dodges, grabs and damage stay stock.
+    const bool attackAction = (id >= aid::KnifeBegin && id <= aid::KnifeAttack) || IsMeleeAction(id);
+    return (c.freeCamera && attackAction) ||
+           (c.meleeCamera && attackAction) ||
+           (c.grabCamera && InEnemyGrab(pawn));
 }
 
 void InitMeleeHooks() {

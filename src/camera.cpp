@@ -354,6 +354,8 @@ static int OurCamera(uint32_t q) {
 static void __fastcall HookCtrlUpdate(uint32_t ctrl, void* edx, uint32_t dt) {
     const int idx = OurCamera(ctrl + 0xE00);
     if (idx >= 0 && g_cams[idx].noAimRig && Cfg().freeCamera) At<uint8_t>(ctrl, 0xE00 + cam::AimRig) = 0;
+    // The scope is left to the game (see game.cpp): no lookV write here any more.  The controller hook only keeps
+    // the reload-on-the-move aim-rig suppression.
     oCtrlUpdate(ctrl, edx, dt);
 }
 
@@ -393,6 +395,8 @@ static void AimTracking(uint32_t q, int idx) {
     }
 }
 
+static bool g_lastAimRig[4] = {};
+static int g_aimSeedFrames[4] = {};
 static void __fastcall HookQfpsUpdate(uint32_t self, void* edx, uint32_t arg) {
     const Config& c = Cfg();
     const int idx = OurCamera(self);
@@ -455,6 +459,36 @@ static void __fastcall HookQfpsUpdate(uint32_t self, void* edx, uint32_t arg) {
     }
     PoseMirror mirror;
     if (fc.leftShoulder) mirror.Apply(self);
+    // Aim pitch hand-off, measured from the aimdbg samples: the game's vertical look channel (cam::LookV) tracks
+    // the view pitch as  lookV = -pitch / 55 deg  (camPitch -16.3 deg -> lookV +0.319, -27.6 -> +0.509).  Carrying
+    // the orbit pitch here, before the game's own camera update, makes the aim start where the player was looking;
+    // the earlier attempt used the opposite sign, which is why it looked unchanged.
+    {
+        const bool rigNow = At<uint8_t>(self, cam::AimRig) == 1;
+        if (rigNow && !g_lastAimRig[idx]) {
+            // Restored: the run that the user reported as "basically done" carried the pitch here, BEFORE the game's
+            // camera update, with the measured sign.  Removing it (to chase a one-frame jump) is what made the aim
+            // stop following the pitch for a plain gun.
+            float v = -fc.pitch / Rad(55.0f);
+            if (v > 1.0f) v = 1.0f;
+            if (v < -1.8f) v = -1.8f;
+            At<float>(self, cam::LookV) = v;
+            g_aimSeedFrames[idx] = 3;
+            Log("aim enter: fcPitch %+.1f deg -> lookV %+.2f", fc.pitch * 57.3f, v);
+        }
+        g_lastAimRig[idx] = rigNow;
+    }
+    // Post-update: plant the pitch in the character's aim state for the first frames of the aim.  These are the
+    // writes the "basically done" build had; they are kept in addition to the look channel.
+    if (g_aimSeedFrames[idx] > 0 && At<uint8_t>(self, cam::AimRig) == 1) {
+        const uint32_t chS = At<uint32_t>(self, cam::Parent);
+        if (chS && Readable((void*)chS, 0x3000)) {
+            At<float>(chS, 0x2908) = fc.pitch;
+            At<float>(chS, 0x290C) = fc.pitch;
+            if (g_aimSeedFrames[idx] == 3) Log("aim seed: ch2908/ch290C <- %+.1f deg", fc.pitch * 57.3f);
+        }
+        g_aimSeedFrames[idx]--;
+    }
     ViewEdit view;
     view.Before(self);
     SetEscapeEar(self, idx, fc.leftShoulder);
@@ -474,6 +508,22 @@ static void __fastcall HookQfpsUpdate(uint32_t self, void* edx, uint32_t arg) {
     const float dx = tgt[0] - eye[0], dz = tgt[2] - eye[2];
     if (dx * dx + dz * dz < 1.0f) return;
     const float baseYaw = atan2f(dx, dz);
+    // Leaving the aim: adopt the pitch the game ended on, otherwise the orbit snaps the view back to the pitch it
+    // had before the aim (the "camera returns to the angle I set" report) after the player had aimed somewhere else.
+    {
+        const bool rigNow = At<uint8_t>(self, cam::AimRig) == 1;
+        if (!rigNow && g_lastAimRig[idx]) {
+            const float len0 = sqrtf(dx * dx + dz * dz);
+            if (len0 > 0.001f) {
+                float p = atan2f(eye[1] - tgt[1], len0);
+                if (p > Rad(55.0f)) p = Rad(55.0f);
+                if (p < Rad(-40.0f)) p = Rad(-40.0f);
+                fc.pitch = p;
+                Log("aim exit: adopted game pitch %+.1f deg", p * 57.3f);
+            }
+        }
+        g_lastAimRig[idx] = rigNow;
+    }
     if (!fc.initialised || now - fc.lastCameraUpdate > 0.5) {
         fc.yaw = baseYaw;
         fc.pitch = DefaultCameraPitch();
@@ -522,11 +572,49 @@ static void __fastcall HookQfpsUpdate(uint32_t self, void* edx, uint32_t arg) {
         Orbit(fc, o, dt, eye, tgt);
     } else {
         fc.yaw = baseYaw;  // aiming, looking at the partner or scripted: the game's camera, followed by the orbit
+        // Follow the pitch too, not only the yaw.  While aiming the game owns the view and the mouse pitches it, but
+        // fc.pitch stayed frozen at the pre-aim value: when the aim ended the orbit put that old pitch back -- the
+        // "the camera returns to the angle it had before aiming" report.  Adopting the view pitch every frame keeps
+        // the orbit in step, so handing the view back is seamless.
+        {
+            const float len = sqrtf(dx * dx + dz * dz);
+            if (len > 0.001f) {
+                float vp = atan2f(eye[1] - tgt[1], len);
+                if (vp > Rad(55.0f)) vp = Rad(55.0f);
+                if (vp < Rad(-40.0f)) vp = Rad(-40.0f);
+                fc.pitch = vp;
+            }
+        }
         if (c.meleeOnly) {
             const float len = sqrtf(dx * dx + dz * dz);
             fc.pitch = atan2f(eye[1] - tgt[1], len);
             if (fc.pitch > Rad(55.0f)) fc.pitch = Rad(55.0f);
             if (fc.pitch < Rad(-40.0f)) fc.pitch = Rad(-40.0f);
+        }
+        // INSTRUMENTATION (temporary): every 250 ms while aiming, dump the candidate channels for the aim pitch so
+        // the real one can be identified from one run instead of by trial.  Compare camPitch (the view, which the
+        // player sees) against lookV / ch2908 / ch290C; the field that tracks the view while the mouse goes up and
+        // down is the one to write.
+        if (At<uint8_t>(self, cam::AimRig) == 1) {
+            static double aimLogT[4] = {};
+            const double tNow2 = NowSec();
+            if (tNow2 - aimLogT[idx] > 0.25) {
+                aimLogT[idx] = tNow2;
+                const uint32_t chA = At<uint32_t>(self, cam::Parent);
+                const float lenA = sqrtf(dx * dx + dz * dz);
+                float camPitchA = lenA > 0.001f ? atan2f(eye[1] - tgt[1], lenA) : 0.0f;
+                float a2908 = 0.0f, a290C = 0.0f, a2994 = 0.0f;
+                bool scope = false;
+                if (chA && Readable((void*)chA, 0x3000)) {
+                    a2908 = At<float>(chA, 0x2908);
+                    a290C = At<float>(chA, 0x290C);
+                    a2994 = At<float>(chA, 0x2994);
+                    scope = At<uint8_t>(chA, ch::Scope) != 0;
+                }
+                Log("aimdbg lookV=%.3f lookH=%.3f camPitch=%+.1f fcPitch=%+.1f ch2908=%+.1f ch290C=%+.1f ch2994=%+.1f scope=%d",
+                    At<float>(self, cam::LookV), At<float>(self, cam::LookH), camPitchA * 57.3f,
+                    g_cams[idx].pitch * 57.3f, a2908 * 57.3f, a290C * 57.3f, a2994 * 57.3f, (int)scope);
+            }
         }
     }
     // Blend for a moment whenever the camera changes hands, from wherever the last frame left it.

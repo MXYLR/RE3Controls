@@ -758,9 +758,13 @@ static void ApplyControls(uint32_t padObj, uint32_t character) {
         }
         if (!aimHeld) S.snapPending = false;
         if (S.snapPending && fc.initialised && !(ride & 0x4F00) && !dash && !PromptUp(slot, P_LT | P_RT | P_LB)) {
+            // On the aiming PRESS the facing must go to the free view immediately, whatever the game was doing:
+            // the old condition also required a locomotion/transition state, so aiming from idle (and every scope
+            // entry, where the scope camera is the weapon camera and never reaches this hook) kept the character's
+            // old aim yaw -- the scope then pointed somewhere other than where the player was looking.  The later
+            // frames still use the narrow test, which is what keeps a scripted turn from being undone.
             const bool stance =
-                pressNow ? (InLocomotion(character) || action == plact::Turn180 || action == plact::ReadyEnd ||
-                            idNow == aid::KnifeEnd || action == plact::Reload || switching)
+                pressNow ? true
                          : (action == plact::ReadyBegin || idNow == aid::KnifeBegin);
             if (stance) {
                 SetCharacterYaw(character, S.snapYaw);
@@ -770,8 +774,59 @@ static void ApplyControls(uint32_t padObj, uint32_t character) {
         }
         // dev: keep the orbit camera while aiming (reserved[24] & 1024), to look at the legs from outside
         const bool devOrbit = DevMode() && (Bridge()->reserved[24] & 1024);
-        fc.active = !busy || devOrbit;
-        fc.noAimRig = reloadMove || changeMove || devOrbit;
+        // A melee/knife swing is "busy", which used to turn the orbit off; melee.cpp then skips the game's action
+        // camera for the swing, so NOBODY drove the view and the mouse did nothing at all during the slash.  While
+        // such an action runs, let the orbit own the view (it is the camera the mod already shows in the melee).
+        const bool camFreeAction = FreeCameraAction(character);
+        fc.active = !busy || devOrbit || camFreeAction;
+        // While the mod owns the view during an attack, the aim rig must go too.  camera.cpp only lets the orbit run
+        // when cam::AimRig == 0; a knife thrown from an aim hold (KnifeFromGun) keeps the rig set, so the orbit was
+        // skipped even though the action camera had been suppressed -- nobody updated the view and the mouse did
+        // nothing.  noAimRig drops the rig for the duration of the action, which is the same mechanism the mod uses
+        // for a reload on the move.
+        fc.noAimRig = reloadMove || changeMove || devOrbit || camFreeAction;
+        // Diagnostic: log every entry/exit of "the mod owns the view during an action" with the real action id, so
+        // one playthrough shows which id the knife uses and whether the orbit took the camera.
+        {
+            static int lastCamFree = -1;
+            const int nowFree = camFreeAction ? 1 : 0;
+            if (nowFree != lastCamFree) {
+                lastCamFree = nowFree;
+                Log("camera owner -> %s (action %02X busy=%d active=%d)", nowFree ? "MOD" : "GAME",
+                    (unsigned)At<uint32_t>(character, ch::ActionId), (int)busy, (int)fc.active);
+            }
+        }
+        // The sniper scope is left entirely to the game.  Its view is the weapon camera (uCameraWep) and its aim is
+        // the game's own scope aim; the mod must only stay out of the way, which is what the `!scopedNow` above does
+        // (it no longer zeroes the game's mouse turn while scoped).  Everything the mod used to inject here -- the
+        // orbit pitch drive, the lookV write in the controller hook -- is gone: two drivers fighting the stock one
+        // is what kept the scope from following in the first place.
+        if (busy && camFreeAction) {
+            // Camera-only turn during the swing: the movement/steering part of the !busy block below must not run.
+            if (kbm) {
+                if (!JustActivated()) {
+                    const float k = MouseUnitRadians() * c.mouseSensitivity;
+                    const uint32_t inv = MouseInvert();
+                    fc.yaw = WrapPi(fc.yaw - kb.mouseX * k * ((inv & 2) ? -1.0f : 1.0f));
+                    fc.pitch += kb.mouseY * k * c.mouseVertical * ((inv & 1) ? -1.0f : 1.0f);
+                }
+            } else {
+                const float rx = DeadZone(st.rx, 0.2f), ry = DeadZone(st.ry, 0.2f);
+                fc.yaw = WrapPi(fc.yaw - rx * Rad(c.cameraSpeed) * (float)dt);
+                fc.pitch -= (c.invertCameraY ? -ry : ry) * Rad(c.cameraPitchSpeed) * (float)dt;
+            }
+            if (fc.pitch > Rad(55.0f)) fc.pitch = Rad(55.0f);
+            if (fc.pitch < Rad(-40.0f)) fc.pitch = Rad(-40.0f);
+            if (physTrg & P_R3) {
+                fc.yaw = CharacterYaw(character);
+                fc.pitch = DefaultCameraPitch();
+            }
+            if (!lowCover) {
+                At<float>(padObj, pp::RAngle) = 0;
+                At<float>(padObj, pp::RMag) = 0;
+                out &= ~P_RS_DIRS;
+            }
+        }
         if (aimHeld || dash) S.swingT = -1;
         if (!busy && S.swingT >= 0) {
             // Quick turn: the camera swings round behind the new facing (eased, about a third of a second).
@@ -856,7 +911,11 @@ static void ApplyControls(uint32_t padObj, uint32_t character) {
         // With the free camera the game's own mouse turning of the body is off (it steers Wesker's dash, and behind
         // low cover it turns the crouch); outside the aim the mouse belongs to the camera, in the aim the game's
         // mouse aim gets it (scaled by MouseSensitivity).
-        if (orbit && !dash && !lowCover) {
+        // NOT in the scope: the scope is drawn by the weapon camera (uCameraWep), which the mod's orbit never touches,
+        // so zeroing the game's mouse turn here left the scope with no way to pitch at all.  `orbit` is
+        // "freeCam && fc.initialised" and stays true while aiming, which is why scoping was affected on every build.
+        const bool scopedNow = At<uint8_t>(character, ch::Scope) != 0;
+        if (orbit && !dash && !lowCover && !scopedNow) {
             At<float>(padObj, 0x200) = 0.0f;
             At<float>(padObj, 0x204) = 0.0f;
         }
@@ -868,7 +927,11 @@ static void ApplyControls(uint32_t padObj, uint32_t character) {
             At<float>(padObj, 0x210) = 0.0f;
             if (!lowCover) KbSyncTargetYaw(character);  // keep the game's own turn target on the facing the mod set
         }
-        if (snapNow && orbit) KbSyncTargetYaw(character);  // the game's mouse aim starts from the new facing
+        // The game keeps its own aim/turn target at ch+0x2A10 (KbSyncTargetYaw writes it from the quaternion and
+        // clears the 0x2A14 re-capture flag).  It has to be re-synced whenever the mod snaps the facing, and the
+        // old `&& orbit` guard skipped exactly the case that needed it: on an aim press the orbit is already off
+        // (the game's aim/scope camera owns the view), so the sniper scope kept aiming at the pre-snap target yaw.
+        if (snapNow) KbSyncTargetYaw(character);
     }
     S.wasAiming = aimHeld;
 
@@ -920,7 +983,8 @@ static void ApplyControls(uint32_t padObj, uint32_t character) {
                                (!scope || scopeWalk),
                      false, walkAllowed, freeCam && fc.initialised);
     // A reload or switch on the move keeps the gait: running plays the weapon set's run clip at the run speed (with
-    // the hips' own bob), walking the walk at the normal walking speed.
+    // the hips' own bob), walking the walk at the normal walking speed.  The knife is deliberately NOT included:
+    // the .x build tried that and lost the omnidirectional movement the leg layer was giving during a slash.
     const bool keepGait = reloadMove || changeMove;
     const bool runIntent = runMode == RunMode::Stock ? (phys & (kbm ? runBit : P_A)) != 0 : wantRun;
     const bool runGait = keepGait && runIntent && stickMag >= 0.3f;
@@ -1174,9 +1238,32 @@ static bool __fastcall HookActionCheck(uint32_t self, void* edx, uint32_t pad, u
 }
 
 // ------------------------------------------------------------------------------------------------ install
+// Signature check for a code address that also accepts an execute-only page.
+// SafeEqual() goes through Readable(), which requires a READ protection bit; a
+// page mapped PAGE_EXECUTE only (no read) then compares as a mismatch even when
+// the bytes are exactly right.  ActionSlot::Check was reported as a mismatch at
+// 0x766F00 by the 01:18 run although the dumped image has the expected
+// 53 56 8B F1 8B 46 0C 32 DB there, so that is the most likely cause.
+static bool CodeMatches(uint32_t addr, const BYTE* sig, size_t n) {
+    MEMORY_BASIC_INFORMATION mbi;
+    if (!VirtualQuery((void*)addr, &mbi, sizeof(mbi))) return false;
+    if (mbi.State != MEM_COMMIT || (mbi.Protect & (PAGE_GUARD | PAGE_NOACCESS))) return false;
+    const DWORD ok = PAGE_READONLY | PAGE_READWRITE | PAGE_WRITECOPY | PAGE_EXECUTE | PAGE_EXECUTE_READ |
+                     PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY;
+    if (!(mbi.Protect & ok)) return false;
+    if ((const BYTE*)addr + n > (const BYTE*)mbi.BaseAddress + mbi.RegionSize) return false;
+    return memcmp((void*)addr, sig, n) == 0;
+}
+
 static bool HookAt(uint32_t addr, const BYTE* expect, size_t n, void* detour, void** orig, const char* name) {
-    if (!SafeEqual((void*)addr, expect, n)) {
-        Log("hook %s: signature mismatch at %08x - unsupported game version?", name, addr);
+    if (!CodeMatches(addr, expect, n)) {
+        if (Readable((void*)addr, 8)) {
+            const uint8_t* b = (const uint8_t*)addr;
+            Log("hook %s: signature mismatch at %08x (bytes %02X %02X %02X %02X %02X %02X %02X %02X)",
+                name, addr, b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7]);
+        } else {
+            Log("hook %s: signature mismatch at %08x (page not readable)", name, addr);
+        }
         return false;
     }
     if (MH_CreateHook((void*)addr, detour, orig) != MH_OK || MH_QueueEnableHook((void*)addr) != MH_OK) {
