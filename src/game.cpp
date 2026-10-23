@@ -634,9 +634,12 @@ static void ApplyControls(uint32_t padObj, uint32_t character) {
         if (knife && (!aiming || knifeWins)) out |= P_LT;
         // RT is the game's fire button everywhere, as in control type D (in the aim, and e.g. Wesker's Knee Cannon).
         if (phys & P_RT) out |= P_X;
-        // RB (L3 with RunButton=RB): locate the partner; while aiming it swaps the camera to the other shoulder (in
-        // a scope it is the zoom button of ScopeWalk instead).
-        if (aimHeld) {
+        // RB (L3 with RunButton=RB): swap the camera to the other shoulder.  With ShoulderSwapAlways (default) it
+        // works whether aiming or not, like a modern TPS: the physical LB keeps the knife outside the aim and the
+        // RB-to-knife forwarding is gone.  In a scope the key stays the ScopeWalk zoom button.
+        if (c.shoulderSwapAlways) {
+            if ((physTrg & partnerBit) && !At<uint8_t>(character, ch::Scope)) fc.leftShoulder = !fc.leftShoulder;
+        } else if (aimHeld) {
             if ((physTrg & partnerBit) && !At<uint8_t>(character, ch::Scope)) fc.leftShoulder = !fc.leftShoulder;
         } else if (phys & partnerBit) {
             out |= P_LB;

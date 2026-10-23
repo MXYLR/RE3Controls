@@ -118,6 +118,8 @@ static const char kDefaultIni[] =
     "          ScopeWalk=1\r\n"
 "          ; Shoulder from the character: Chris on the left, Sheva on the right (kind bits, see the log)\r\n"
 "          ShoulderAuto=1\r\n"
+"          ; 1 = the shoulder key (RB / Q) works outside the aim too; the knife stays on LB\r\n"
+"          ShoulderSwapAlways=1\r\n"
 "          ShoulderLeftKinds=0\r\n"
 "          ; F zooms in and C zooms out while aiming a plain gun (not the scope)\r\n"
 "          ZoomKeys=1\r\n"
@@ -343,6 +345,7 @@ void LoadConfig() {
     c.switchWalk = GetBool(path, "Aim", "SwitchWalk", aimWalk);
     c.scopeWalk = GetBool(path, "Aim", "ScopeWalk", c.scopeWalk);
     c.shoulderAuto = GetBool(path, "Camera", "ShoulderAuto", c.shoulderAuto);
+    c.shoulderSwapAlways = GetBool(path, "Camera", "ShoulderSwapAlways", c.shoulderSwapAlways);
     {
         char km[64];
         GetPrivateProfileStringA("Camera", "ShoulderLeftKinds", "0", km, sizeof(km), path);
