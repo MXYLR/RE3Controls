@@ -98,17 +98,26 @@ static float DeadZone(float v, float dz) {
 // Wesker's dash in The Mercenaries: the knee_bazooka actions (start, run, Knee Cannon, stop, turns right/left/back).
 static bool IsDash(uint32_t id) { return id >= 0x47 && id <= 0x4D; }
 
-// Character kind from the game's function at 0x715B90 (DTI id >> 8 & 0xFFFF).
-static bool IsWesker(uint32_t character) {
-    static int ok = 0;  // 1 = the function is the expected one; -1 = not (then nobody is Wesker)
+// Character kind from the game's function at 0x715B90 (DTI id >> 8 & 0xFFFF).  Known values on this build:
+// 0 = Chris, 1 = Sheva, 3 = Wesker (the dash check).  The kind is logged once per character so the shoulder table
+// (ShoulderLeftKinds) can be corrected from a single run.
+static int CharacterKind(uint32_t character) {
+    static int ok = 0;  // 1 = the function is the expected one; -1 = not (then the kind is unknown)
     if (!ok) {
         static const BYTE sig[] = {0x8B, 0x4C, 0x24, 0x04, 0x8B, 0x01, 0x8B, 0x50, 0x10,
                                    0xFF, 0xD2, 0x8B, 0x40, 0x20, 0xC1, 0xE8, 0x08};
         ok = SafeEqual((void*)0x00715B90, sig, sizeof(sig)) ? 1 : -1;
-        if (ok < 0) Log("character kind: unexpected code at 00715b90, WeskerDash left off");
+        if (ok < 0) Log("character kind: unexpected code at 00715b90, shoulder auto and WeskerDash off");
     }
-    return ok > 0 && ((uint32_t(__cdecl*)(uint32_t))0x00715B90)(character) == 3;
+    if (ok < 0) return -1;
+    return (int)(((uint32_t(__cdecl*)(uint32_t))0x00715B90)(character) & 0xFFu);
 }
+static bool IsWesker(uint32_t character) { return CharacterKind(character) == 3; }
+// Plain-gun zoom state, read by the camera through ZoomFovExtra().
+static int g_zoomStep = 0;
+static float g_zoomFov = 0.0f;
+static bool g_zoomFPrev = false, g_zoomCPrev = false;
+float ZoomFovExtra() { return g_zoomFov; }
 
 // Whether the game would reload now: its own test before a reload (0xB83E67) - the item in hand (0xC4B700(inv, 0xE))
 // is a gun whose magazine is not full and that has spare ammo (0xC4DE50). Without the expected code: always.
@@ -519,7 +528,44 @@ static void ApplyControls(uint32_t padObj, uint32_t character) {
     // Every local player has a free camera of their own (split screen: on their own camera controller, whatever
     // device each one plays with).
     FreeCam& fc = CamFor(character);
+    // Shoulder from the character: a fresh character gets its default side (Chris left, Sheva right); the RB swap
+    // during the aim still overrides it for the rest of that character's life.
+    if (fc.character != character) {
+        if (c.shoulderAuto) {
+            const int kind = CharacterKind(character);
+            if (kind >= 0 && kind < 32) {
+                const bool wantLeft = ((c.shoulderLeftMask >> kind) & 1u) != 0;
+                fc.leftShoulder = wantLeft;
+                Log("shoulder: kind %d -> %s", kind, wantLeft ? "left" : "right");
+            }
+        }
+        g_zoomStep = 0;
+        g_zoomFov = 0.0f;
+    }
     fc.character = character;
+    // Plain-gun zoom (F in, C out), keyboard only, never in a scope (that one has its own zoom); the level is
+    // dropped when the aim ends so every aim starts at 1x, like the scope.
+    if (c.zoomKeys && kbm && KbLayerFor(character)) {
+        if (!aimHeld || At<uint8_t>(character, ch::Scope)) {
+            g_zoomStep = 0;
+        } else {
+            const bool fDown = (GetAsyncKeyState('F') & 0x8000) != 0;
+            const bool cDown = (GetAsyncKeyState('C') & 0x8000) != 0;
+            if (fDown && !g_zoomFPrev && g_zoomStep < c.zoomMaxStep) ++g_zoomStep;
+            if (cDown && !g_zoomCPrev && g_zoomStep > 0) --g_zoomStep;
+            g_zoomFPrev = fDown;
+            g_zoomCPrev = cDown;
+        }
+        g_zoomFov = c.zoomFovStep * (float)g_zoomStep;
+        static int loggedStep = 0;
+        if (g_zoomStep != loggedStep) {
+            loggedStep = g_zoomStep;
+            if (g_zoomStep != 0) Log("zoom: step %d, fov %+.0f", g_zoomStep, g_zoomFov);
+        }
+    } else {
+        g_zoomStep = 0;
+        g_zoomFov = 0.0f;
+    }
     // ch+0x2D8C: 0x4000 riding something, with 0x80 a gun emplacement, 0x40 the jeep gun, 0x20 the airboat driver
     // (the airboat passenger has only 0x4000 and keeps the mod's controls).
     const uint32_t ride = At<uint32_t>(character, 0x2D8C);

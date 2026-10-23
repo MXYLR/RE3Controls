@@ -116,6 +116,13 @@ static const char kDefaultIni[] =
     "\r\n"
     "; Walk while looking through a scope (sniper / rocket launcher)\r\n"
     "          ScopeWalk=1\r\n"
+"          ; Shoulder from the character: Chris on the left, Sheva on the right (kind bits, see the log)\r\n"
+"          ShoulderAuto=1\r\n"
+"          ShoulderLeftKinds=0\r\n"
+"          ; F zooms in and C zooms out while aiming a plain gun (not the scope)\r\n"
+"          ZoomKeys=1\r\n"
+"          ZoomFovStep=-14\r\n"
+"          ZoomMaxStep=2\r\n"
     "\r\n"
     "; Walking speeds while aiming (1.0 = normal walk)\r\n"
     "          WalkSpeed=1.125\r\n"
@@ -335,6 +342,23 @@ void LoadConfig() {
     c.reloadWalk = GetBool(path, "Aim", "ReloadWalk", aimWalk);
     c.switchWalk = GetBool(path, "Aim", "SwitchWalk", aimWalk);
     c.scopeWalk = GetBool(path, "Aim", "ScopeWalk", c.scopeWalk);
+    c.shoulderAuto = GetBool(path, "Camera", "ShoulderAuto", c.shoulderAuto);
+    {
+        char km[64];
+        GetPrivateProfileStringA("Camera", "ShoulderLeftKinds", "0", km, sizeof(km), path);
+        unsigned mask = 0;
+        for (const char* p = km; *p;) {
+            while (*p == ' ' || *p == ',' || *p == ';') ++p;
+            if (*p < '0' || *p > '9') { ++p; continue; }
+            int v = 0;
+            while (*p >= '0' && *p <= '9') v = v * 10 + (*p++ - '0');
+            if (v >= 0 && v < 32) mask |= 1u << v;
+        }
+        if (mask) c.shoulderLeftMask = mask;
+    }
+    c.zoomKeys = GetBool(path, "Aim", "ZoomKeys", c.zoomKeys);
+    c.zoomFovStep = GetFloat(path, "Aim", "ZoomFovStep", c.zoomFovStep);
+    c.zoomMaxStep = (int)GetFloat(path, "Aim", "ZoomMaxStep", (float)c.zoomMaxStep);
     {
         char ib[16];
         GetPrivateProfileStringA("Controls", "InteractButton", "A", ib, sizeof(ib), path);

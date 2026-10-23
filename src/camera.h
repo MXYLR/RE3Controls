@@ -23,6 +23,8 @@ FreeCam& CamFor(uint32_t character);
 bool IsCamCharacter(uint32_t character);
 void InitCameraHooks();
 float DefaultCameraPitch();  // radians, from the ini
+// Extra fov (degrees, negative = closer) from the plain-gun zoom keys, 0 when off.
+float ZoomFovExtra();
 
 // yaw helpers: forward = (sin yaw, 0, cos yaw), right = (-cos yaw, 0, sin yaw)
 // World facing of a character (on a moving boat or platform: its own yaw plus the platform's heading).

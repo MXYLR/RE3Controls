@@ -34,6 +34,11 @@ struct Config {
     bool meleeOnly = false;         // Mode=MeleeCamera: only the melee camera, everything else as in the original game
     bool gunWalk = true;            // walk while aiming a gun
     bool scopeWalk = true;          // walk in the sniper / rocket launcher scope (zoom on RB + left stick)
+    bool shoulderAuto = true;       // pick the shoulder from the character (Chris left, Sheva right by default)
+    unsigned shoulderLeftMask = 1u; // bit per character kind (0x715B90) that stands on the LEFT shoulder
+    bool zoomKeys = true;           // F zooms in and C zooms out while aiming a plain gun
+    float zoomFovStep = -14.0f;     // degrees of fov per zoom step (negative = closer)
+    int zoomMaxStep = 2;            // highest zoom step (2 = two presses)
     bool knifeWalk = true;          // walk with the knife readied
     bool reloadWalk = true;         // reload on the move (otherwise standing, camera stays free)
     bool switchWalk = true;         // keep walking while switching weapons

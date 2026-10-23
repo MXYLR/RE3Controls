@@ -204,7 +204,8 @@ struct ViewSettings {
 static bool ViewSettingsFor(uint32_t q, ViewSettings* out) {
     const Config& c = Cfg();
     *out = ViewSettings{};
-    if (!c.enabled || c.meleeOnly || (c.aimDistance <= 0.0f && c.fieldOfView == 0.0f && c.aimFieldOfView == 0.0f) ||
+    if (!c.enabled || c.meleeOnly ||
+        (c.aimDistance <= 0.0f && c.fieldOfView == 0.0f && c.aimFieldOfView == 0.0f && ZoomFovExtra() == 0.0f) ||
         !Readable((void*)q, 0x680))
         return false;
     const uint32_t ch = At<uint32_t>(q, cam::Parent);
@@ -215,7 +216,7 @@ static bool ViewSettingsFor(uint32_t q, ViewSettings* out) {
     const bool mounted = MountedGunAim(ch, rig);
     out->back = mounted ? 0.0f : c.aimDistance;
     out->fov = c.fieldOfView;
-    out->aimFov = mounted ? 0.0f : c.aimFieldOfView;
+    out->aimFov = mounted ? 0.0f : c.aimFieldOfView + ZoomFovExtra();  // plain-gun zoom (F / C) adds here
     return true;
 }
 
