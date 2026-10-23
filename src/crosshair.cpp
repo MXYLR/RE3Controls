@@ -45,9 +45,7 @@ constexpr uint32_t ChCursor = 0x2910;    // float2, mouse cursor; the type-3 ret
 // uLaserSight colours: own beam, dot, dot glow (vector4 each)
 constexpr uint32_t kLaserColors[3] = {0x270, 0x2A0, 0x2C0};
 const float kLaserDefaults[3][4] = {{2.0f, 0, 0, 1.0f}, {1.0f, 0, 0, 0.2f}, {1.0f, 0, 0, 0.186f}};
-// The laser object holds more red colour entries in the same table (0x250..0x2C0, 16 bytes each). With only the three
-// above hidden the beam was still drawn at its start (2 cm at the barrel tip in a lit place) and, in a dark place,
-// as a long white beam.
+// Four more colour entries of the laser object (16 bytes each), hidden with the three above.
 constexpr uint32_t kLaserExtra[4] = {0x250, 0x260, 0x280, 0x2B0};
 const float kLaserExtraDefaults[4][4] = {{1.3f, 0, 0, 1.0f}, {1.3f, 0, 0, 1.0f}, {1.3f, 0, 0, 1.0f}, {1.2f, 0, 0, 0}};
 
@@ -263,20 +261,20 @@ bool CrosshairOn(uint32_t ch) {
            GunUp(ch) && !At<uint8_t>(ch, ChScope) && Rd(ch + ChAimRayObj) != 0 && PlainGun(ch);
 }
 
-// The game keeps the barrel line next to the shot point every frame: start ch+0x2710 (the barrel tip), end ch+0x2720
-// (where the barrel line hits, or a far point), copied into the laser object at +0x210/+0x220 for the beam.
-// The grenade launcher (item 0x10C) does not fly toward the shot point ch+0x2700 like bullets do, nor along that
-// line's end: it leaves along the barrel itself, which points up and to the left of the camera ray (about 8 and 5
-// degrees in the logs). So its crosshair is drawn where the barrel line ends, which is where the grenade goes.
+// The barrel line: start ch+0x2710, end ch+0x2720, copied into the laser object at +0x210/+0x220. For the grenade
+// launcher (0x10C) and the Gatling gun (0x115) the crosshair is drawn where the line ends (HookReticle).
 constexpr uint32_t kItemGrenadeLauncher = 0x10C;
+constexpr uint32_t kItemGatlingGun = 0x115;
 constexpr uint32_t ChLaserStart = 0x2710;
 constexpr uint32_t ChLaserEnd = 0x2720;
-float g_barrel[3] = {};     // the launcher's barrel hit of the last laser raycast
+float g_barrel[3] = {};     // end of the barrel line at the last laser raycast, for the launcher or the Gatling gun
 uint32_t g_barrelCh = 0;
-bool LauncherInHand(uint32_t ch) {
+bool BarrelWeaponInHand(uint32_t ch) {
     uint32_t entry = 0;
     int rounds = 0;
-    return GunInHand(ch, &entry, &rounds) && Rd(entry + 4) == kItemGrenadeLauncher;
+    if (!GunInHand(ch, &entry, &rounds)) return false;
+    const uint32_t item = Rd(entry + 4);
+    return item == kItemGrenadeLauncher || item == kItemGatlingGun;
 }
 
 // The camera aim ray: what it hits colours the crosshair.
@@ -312,14 +310,13 @@ int __fastcall HookLaserRaycast(uint32_t ch, void* edx) {
     memcpy((void*)(ch + ChShot), shot, 12);
     const float* start = (const float*)(ch + ChLaserStart);
     float* end = (float*)(ch + ChLaserEnd);
-    if (LauncherInHand(ch)) {
-        // Where the barrel line ends: the grenade goes there, so the crosshair is drawn there (HookReticle).
+    if (BarrelWeaponInHand(ch)) {
+        // End of the barrel line, used by HookReticle for the crosshair of these two weapons.
         memcpy(g_barrel, end, 12);
         g_barrelCh = ch;
     }
-    // The beam is drawn from that line, in dark places too, where hiding its colours is not enough (a long white
-    // beam to the left of the crosshair). Keep its direction and make it half a millimetre long. Bullets and the
-    // grenade do not read it.
+    // The beam is drawn from that line. It is kept in its direction and made half a millimetre long, because with the
+    // colours hidden a long white beam still showed in dark places.
     const float d[3] = {end[0] - start[0], end[1] - start[1], end[2] - start[2]};
     const float len = sqrtf(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
     if (len > 1.0f) {
@@ -344,8 +341,8 @@ void __fastcall HookReticle(uint32_t cockpit, void* edx) {
             HideLaser(laser);
             if (CrosshairOn(ch)) {
                 At<uint8_t>(cockpit, CkColour) = AimFor(ch).hit == 1 ? 2 : 1;
-                if (g_barrelCh == ch && LauncherInHand(ch)) {
-                    // Grenade launcher: the crosshair sits where the barrel line ends, for this draw only.
+                if (g_barrelCh == ch && BarrelWeaponInHand(ch)) {
+                    // Launcher or Gatling gun: the crosshair is drawn at the end of the barrel line, for this draw only.
                     memcpy(aimSaved, (void*)(ch + ChAimPoint), 12);
                     memcpy((void*)(ch + ChAimPoint), g_barrel, 12);
                     aimCh = ch;
