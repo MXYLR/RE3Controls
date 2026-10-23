@@ -3,7 +3,7 @@
 
 // Developer build (build.sh dev): dev server, shared-memory bridge with a virtual pad, screenshots. Release builds
 // leave all of it out.
-#define RE3C_VERSION_STR "1.9"
+#define RE3C_VERSION_STR "1.9.4-mod1"
 
 #ifndef RE3C_DEV
 #define RE3C_DEV 0
@@ -87,14 +87,50 @@ struct BridgeShared {
 void Log(const char* fmt, ...);
 
 // True if [p, p+n) is committed readable memory.
+// Hot path: called hundreds of times per frame. VirtualQuery is a kernel transition, so recent positive results are
+// cached. Entries expire after a few milliseconds: memory is freed and committed all the time (chapter restarts,
+// level loads), so a region that was readable a moment ago may be gone now, and a stale "yes" means reading freed
+// memory. Negative results are never cached (the same region can be committed later). The table is shared by the
+// game's worker threads (split screen), hence the spin lock around it.
 inline bool Readable(const void* p, size_t n) {
+    if (!p || n == 0) return false;
+    const uintptr_t start = (uintptr_t)p;
+    const uintptr_t end = start + n;
+    if (end < start) return false;
+
+    struct Region {
+        uintptr_t base, end;
+        DWORD tick;
+    };
+    static Region cache[16];
+    static unsigned cache_i = 0;
+    static volatile LONG lock = 0;
+    const DWORD now = GetTickCount();
+
+    while (InterlockedExchange(&lock, 1)) YieldProcessor();
+    for (unsigned i = 0; i < 16; ++i) {
+        const Region& r = cache[i];
+        if (r.end == 0 || (DWORD)(now - r.tick) > 32) continue;
+        if (start >= r.base && end <= r.end) {
+            InterlockedExchange(&lock, 0);
+            return true;
+        }
+    }
+    InterlockedExchange(&lock, 0);
+
     MEMORY_BASIC_INFORMATION mbi;
-    if (!p || !VirtualQuery(p, &mbi, sizeof(mbi))) return false;
+    if (!VirtualQuery(p, &mbi, sizeof(mbi))) return false;
     if (mbi.State != MEM_COMMIT || (mbi.Protect & (PAGE_GUARD | PAGE_NOACCESS))) return false;
     const DWORD readable = PAGE_READONLY | PAGE_READWRITE | PAGE_WRITECOPY | PAGE_EXECUTE_READ |
                            PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY;
     if (!(mbi.Protect & readable)) return false;
-    return (const BYTE*)p + n <= (const BYTE*)mbi.BaseAddress + mbi.RegionSize;
+    const uintptr_t rbase = (uintptr_t)mbi.BaseAddress;
+    const uintptr_t rend = rbase + mbi.RegionSize;
+
+    while (InterlockedExchange(&lock, 1)) YieldProcessor();
+    cache[cache_i++ & 15] = {rbase, rend, now};
+    InterlockedExchange(&lock, 0);
+    return end <= rend;
 }
 inline bool SafeEqual(const void* p, const void* sig, size_t n) {
     return Readable(p, n) && memcmp(p, sig, n) == 0;

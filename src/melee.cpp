@@ -33,12 +33,11 @@ PFN_Pawn oUpdateActionCamera = nullptr;
 // this one-shot flag so the new motion gets no action camera.
 void __fastcall HookUpdateActionCamera(uint32_t pawn, void* edx) {
     const Config& c = Cfg();
-    if (c.enabled && (c.freeCamera || c.meleeOnly) && pawn && IsCamCharacter(pawn) &&
-        Readable((void*)pawn, 0x3000) && At<uint32_t>(pawn, ch::NetControl) == 0 &&
-        (At<uint16_t>(pawn, PawnMotionState) & 2) && FreeCameraAction(pawn)) {
-        // The keyboard/mouse gate that used to be required here (KbLayerFor) kept the action camera for players
-        // whose KB layer was not active that frame, which is exactly when the slash felt locked.  For a knife action
-        // the mod wants the camera in any case.
+    // Cheap gates first: most frames are not starting a motion on a local camera character.
+    if (c.enabled && (c.freeCamera || c.meleeOnly) && pawn && (At<uint16_t>(pawn, PawnMotionState) & 2) &&
+        IsCamCharacter(pawn) && At<uint32_t>(pawn, ch::NetControl) == 0 && FreeCameraAction(pawn)) {
+        // The keyboard/mouse gate keeps the action camera for players whose KB layer is not active that frame,
+        // which is exactly when the slash felt locked.  For a knife action the mod wants the camera in any case.
         const uint32_t id = At<uint32_t>(pawn, ch::ActionId);
         if (!KbMouse(pawn) || KbLayerFor(pawn) || (id >= aid::KnifeBegin && id <= aid::KnifeAttack))
             At<uint8_t>(pawn, PawnSkipActionCamera) = 1;
@@ -130,10 +129,11 @@ bool FreeCameraAction(uint32_t pawn) {
     // free depended on which id the game happened to start; that is why the quick knife could not be turned.  This
     // range covers the knife stance/attacks (0x22-0x27) and the attack_* family (0x30-0x4D, incl. the co-op help
     // attack 0x6F and the two em10 attacks), and nothing else: taunt (0x2F), dodges, grabs and damage stay stock.
+    // One int compare first: the enemy-grab DTI tables are only walked when GrabCamera is on.
     const bool attackAction = (id >= aid::KnifeBegin && id <= aid::KnifeAttack) || IsMeleeAction(id);
-    return (c.freeCamera && attackAction) ||
-           (c.meleeCamera && attackAction) ||
-           (c.grabCamera && InEnemyGrab(pawn));
+    if (attackAction && (c.freeCamera || c.meleeCamera)) return true;
+    if (c.grabCamera && InEnemyGrab(pawn)) return true;
+    return false;
 }
 
 void InitMeleeHooks() {
