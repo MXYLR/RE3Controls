@@ -1,4 +1,4 @@
-RE3Controls для Resident Evil 5 — управление как в Resident Evil 3 (2020)          v1.9.4
+RE3Controls для Resident Evil 5 — управление как в Resident Evil 3 (2020)
 =========================================================================
 
 Что делает мод

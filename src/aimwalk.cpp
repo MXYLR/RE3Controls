@@ -81,6 +81,7 @@ struct LegLayer {
     bool faceHeld = false;  // slot 6 borrowed; the face clip the game asked for meanwhile goes back at the end
     bool runGait = false;   // the run clip plays (with hysteresis against the walk blend)
     uint32_t noBlendBank = 0xFFFFFFFF;  // weapon set without the strafe/back clips: one clip only
+    uint8_t walkBank = 0;   // walk bank before a reload, kept for characters of kind 4 and up (see AimWalkUpdate)
     double startTime = 0;   // when the layer became active
     // The game's own last request for the stance slots 3-5 while the layer replaced or skipped it (clip, speed),
     // put back when the layer ends if the slot still holds the replacement.
@@ -177,6 +178,7 @@ struct WalkSample {
     uint32_t ch = 0;
     float phase = 0;
     double time = 0;
+    uint8_t bank = 0;  // motion bank of that clip
 };
 static WalkSample g_walk[4];  // one per local player (split screen)
 
@@ -736,6 +738,22 @@ static bool Switching(uint32_t ch) {
     return vt == plact::WeaponChange || vt == plact::WeaponChangeReady;
 }
 
+static bool Reloading(uint32_t ch) {
+    const uint32_t act = Readable((void*)(ch + ch::CurAction), 4) ? At<uint32_t>(ch, ch::CurAction) : 0;
+    return Readable((void*)act, 4) && At<uint32_t>(act, 0) == plact::Reload;
+}
+
+// Character kind from the game's function at 0x715B90 (the same as IsWesker in game.cpp). -1 without the expected code.
+static int CharacterKind(uint32_t ch) {
+    static int ok = 0;
+    if (!ok) {
+        static const BYTE sig[] = {0x8B, 0x4C, 0x24, 0x04, 0x8B, 0x01, 0x8B, 0x50, 0x10,
+                                   0xFF, 0xD2, 0x8B, 0x40, 0x20, 0xC1, 0xE8, 0x08};
+        ok = SafeEqual((void*)0x00715B90, sig, sizeof(sig)) ? 1 : -1;
+    }
+    return ok > 0 ? (int)((uint32_t(__cdecl*)(uint32_t))0x00715B90)(ch) : -1;
+}
+
 bool LegLayerState(uint32_t ch) { return AimWalkState(ch) || Switching(ch); }
 
 static void StopLayer(LegLayer& L) {
@@ -934,6 +952,7 @@ bool AimWalkUpdate(uint32_t ch, float stickX, float stickY, bool walkAllowed, fl
             WalkSample* w = WalkFor(ch, true);
             w->phase = Frac(At<float>(s0, 0x18) / At<float>(s0, 0x1C) - LeftStrike(ch, 0, kStrike[0]));
             w->time = Now();
+            w->bank = (uint8_t)(m0 >> 8);
         }
     }
     // preStart: the aim, the knife or a reload was asked for this frame while walking; the game starts that action
@@ -994,7 +1013,17 @@ bool AimWalkUpdate(uint32_t ch, float stickX, float stickY, bool walkAllowed, fl
     // it is swapped into bank 5 halfway) or bank 1 (grenades, cover): the walk of the weapon in hand, which the engine
     // rebinds to the new one at the swap.
     const uint16_t stance = At<uint16_t>(SlotObj(ch, 0), 4);
-    const uint32_t bank = stance == 0xFFFF || Switching(ch) ? 0x05 : (stance >> 8);
+    uint32_t bank = stance == 0xFFFF || Switching(ch) ? 0x05 : (stance >> 8);
+    // Characters of kind 4 and up: during a reload the walk bank stays the one used before the reload.
+    if (CharacterKind(ch) >= 4) {
+        if (Reloading(ch)) {
+            const WalkSample* ws = WalkFor(ch, false);
+            const uint32_t keep = L->walkBank ? L->walkBank : (ws ? ws->bank : 0);
+            if (keep) bank = keep;
+        } else if (stance != 0xFFFF && !Switching(ch)) {
+            L->walkBank = (uint8_t)bank;
+        }
+    }
     const bool runGait = run && L->axis == 0 && fabsf(delta) < (L->runGait ? 0.5f : 0.3f);
     L->runGait = runGait;
     uint16_t want = (uint16_t)((bank << 8) | (runGait ? 0x04 : kAxisClip[L->axis]));

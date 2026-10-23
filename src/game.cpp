@@ -98,7 +98,7 @@ static float DeadZone(float v, float dz) {
 // Wesker's dash in The Mercenaries: the knee_bazooka actions (start, run, Knee Cannon, stop, turns right/left/back).
 static bool IsDash(uint32_t id) { return id >= 0x47 && id <= 0x4D; }
 
-// Character kind (0x715B90: DTI id >> 8 & 0xFFFF): 0 Chris, 1 Sheva, 2 Jill, 3 Wesker, 4 and up the Reunion cast.
+// Character kind from the game's function at 0x715B90 (DTI id >> 8 & 0xFFFF).
 static bool IsWesker(uint32_t character) {
     static int ok = 0;  // 1 = the function is the expected one; -1 = not (then nobody is Wesker)
     if (!ok) {

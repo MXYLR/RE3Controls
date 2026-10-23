@@ -1,5 +1,5 @@
-RE3Controls for Resident Evil 5 - Resident Evil 3 (2020) style controls          v1.9.4
-=================================================================================
+RE3Controls for Resident Evil 5 - Resident Evil 3 (2020) style controls
+=======================================================================
 
 What the mod does
 -----------------
