@@ -33,7 +33,7 @@ struct Config {
     bool grabCamera = true;         // enemy grabs keep the normal camera (no grab cinematic), right stick turns it
     bool meleeOnly = false;         // Mode=MeleeCamera: only the melee camera, everything else as in the original game
     bool gunWalk = true;            // walk while aiming a gun
-    bool scopeWalk = false;         // walk in the sniper / rocket launcher scope (zoom on RB + left stick)
+    bool scopeWalk = true;          // walk in the sniper / rocket launcher scope (zoom on RB + left stick)
     bool knifeWalk = true;          // walk with the knife readied
     bool reloadWalk = true;         // reload on the move (otherwise standing, camera stays free)
     bool switchWalk = true;         // keep walking while switching weapons

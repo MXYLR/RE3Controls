@@ -115,7 +115,7 @@ static const char kDefaultIni[] =
     "          SwitchWalk=1\r\n"
     "\r\n"
     "; Walk while looking through a scope (sniper / rocket launcher)\r\n"
-    "          ScopeWalk=0\r\n"
+    "          ScopeWalk=1\r\n"
     "\r\n"
     "; Walking speeds while aiming (1.0 = normal walk)\r\n"
     "          WalkSpeed=1.125\r\n"
