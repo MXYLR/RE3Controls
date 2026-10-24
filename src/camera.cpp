@@ -405,6 +405,26 @@ static void AimTracking(uint32_t q, int idx) {
 
 static bool g_lastAimRig[4] = {};
 static int g_aimSeedFrames[4] = {};
+// One compact line per aim (start, ~0.35 s in, end) with every field the aim could follow, so a single aim with the
+// mouse moved up and down shows which one tracks the camera: camPitch = the view the player sees, shotY = the point the
+// game aims/ shoots at (ch+0x2700), aim8/aimC = the two character angles, lookV = the game's vertical look channel.
+static void AimTrace(uint32_t self, int idx, const char* when) {
+    const uint32_t ch = At<uint32_t>(self, cam::Parent);
+    const float* eye = (const float*)(self + cam::EyeAim);
+    const float* tgt = (const float*)(self + cam::TargetAim);
+    const float dx = tgt[0] - eye[0], dz = tgt[2] - eye[2];
+    const float len = sqrtf(dx * dx + dz * dz);
+    const float camPitch = len > 0.001f ? atan2f(eye[1] - tgt[1], len) * 57.3f : 0.0f;
+    float a8 = 0.0f, aC = 0.0f, shotY = 0.0f, rayY = 0.0f;
+    if (ch && Readable((void*)ch, 0x3000)) {
+        a8 = At<float>(ch, 0x2908) * 57.3f;
+        aC = At<float>(ch, 0x290C) * 57.3f;
+        shotY = At<float>(ch, 0x2704);
+        rayY = At<float>(ch, 0x2894);
+    }
+    Log("aimtrace[%s] camPitch=%+.1f lookV=%+.2f aim8=%+.1f aimC=%+.1f shotY=%+.0f rayY=%+.0f",
+        when, camPitch, At<float>(self, cam::LookV), a8, aC, shotY, rayY);
+}
 static void __fastcall HookQfpsUpdate(uint32_t self, void* edx, uint32_t arg) {
     const Config& c = Cfg();
     if (!c.enabled) {
@@ -551,7 +571,17 @@ static void __fastcall HookQfpsUpdate(uint32_t self, void* edx, uint32_t arg) {
             if (v < -1.8f) v = -1.8f;
             At<float>(self, cam::LookV) = v;
             g_aimSeedFrames[idx] = 3;
-            Log("aim enter: fcPitch %+.1f deg -> lookV %+.2f", fc.pitch * 57.3f, v);
+            AimTrace(self, idx, "in");
+        }
+        // One more sample a moment later and one when the aim ends: together they show which field the game's aim
+        // actually follows while the player moves the mouse.
+        if (rigNow) {
+            static double traceAt[4] = {};
+            const double tNow = NowSec();
+            if (traceAt[idx] == 0) traceAt[idx] = tNow;
+            if (tNow - traceAt[idx] > 0.35 && g_lastAimRig[idx]) { traceAt[idx] = 0; AimTrace(self, idx, "mid"); }
+        } else if (g_lastAimRig[idx]) {
+            AimTrace(self, idx, "out");
         }
         g_lastAimRig[idx] = rigNow;
     }
