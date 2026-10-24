@@ -835,6 +835,22 @@ static void ApplyControls(uint32_t padObj, uint32_t character) {
         if (pressNow) {
             S.snapPending = true;
             S.snapYaw = fc.yaw;
+            // Aim pitch hand-off through the game's own input.  The aim angle is produced by the pad-update chain
+            // (0xB8A3E0 -> 0xB86CD0) from the mouse/stick, and writing the aim state directly freezes its integrator
+            // (proved by the mod35 experiment), while writing the camera look channel does not persist.  So the
+            // difference between the view pitch and the pitch the game's aim had last time is injected as mouse
+            // movement on the press frame: the game integrates it like any other mouse motion and keeps control.
+            if (kbm && c.aimPitchSnap && !JustActivated()) {
+                float delta = fc.pitch - AimPitchLast();
+                if (delta > Rad(60.0f)) delta = Rad(60.0f);
+                if (delta < Rad(-60.0f)) delta = Rad(-60.0f);
+                const float unit = MouseUnitRadians() * c.mouseSensitivity * c.mouseVertical;
+                if (fabsf(delta) > 0.01f && unit > 1e-6f) {
+                    const float inv = (MouseInvert() & 1) ? -1.0f : 1.0f;
+                    At<float>(padObj, 0x210) += delta / (unit * inv);
+                    Log("aim: pitch nudge %.1f deg -> %.2f mouse units", delta * 57.3f, delta / (unit * inv));
+                }
+            }
         }
         if (!aimHeld) S.snapPending = false;
         if (S.snapPending && fc.initialised && !(ride & 0x4F00) && !dash && !PromptUp(slot, P_LT | P_RT | P_LB)) {

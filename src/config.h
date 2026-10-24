@@ -43,6 +43,7 @@ struct Config {
     float zoomFovStep = -20.0f;     // degrees of fov per zoom step (negative = closer)
     int zoomMaxStep = 3;            // highest zoom step (3 = three presses, about -60 degrees)
     bool scopeLook = false;         // EXPERIMENTAL, off: writing the aim state per frame freezes the scope pitch
+    bool aimPitchSnap = true;       // on an aim press, nudge the game's aim pitch to the view through its own mouse input
     bool knifeWalk = true;          // walk with the knife readied
     bool reloadWalk = true;         // reload on the move (otherwise standing, camera stays free)
     bool switchWalk = true;         // keep walking while switching weapons

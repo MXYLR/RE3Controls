@@ -406,6 +406,8 @@ static void AimTracking(uint32_t q, int idx) {
 // Camera ray while aiming, shared with crosshair.cpp through AimCameraRay().
 static float g_aimEye[3] = {0, 0, 0}, g_aimDir[3] = {0, 0, 1};
 static bool g_aimRayValid = false;
+static float g_aimPitchLast = 0.0f;
+float AimPitchLast() { return g_aimPitchLast; }
 bool AimCameraRay(float eye[3], float dir[3]) {
     if (!g_aimRayValid) return false;
     for (int i = 0; i < 3; ++i) { eye[i] = g_aimEye[i]; dir[i] = g_aimDir[i]; }
@@ -739,6 +741,7 @@ static void __fastcall HookQfpsUpdate(uint32_t self, void* edx, uint32_t arg) {
                 if (vp > Rad(55.0f)) vp = Rad(55.0f);
                 if (vp < Rad(-40.0f)) vp = Rad(-40.0f);
                 fc.pitch = vp;
+                g_aimPitchLast = vp;  // reference for the next aim start's pitch nudge
             }
         }
         if (c.meleeOnly) {

@@ -32,6 +32,9 @@ float ZoomFovExtra();
 // Camera ray while aiming (eye + unit direction), used by the crosshair code so the shot follows the camera instead of
 // the barrel line.  False when the game does not own the aim camera this frame.
 bool AimCameraRay(float eye[3], float dir[3]);
+// Pitch (radians) of the game's own aim camera the last time it was running; the aim start nudges the game's pitch
+// towards the free camera through its own input using this as the "where the aim was" reference.
+float AimPitchLast();
 
 // yaw helpers: forward = (sin yaw, 0, cos yaw), right = (-cos yaw, 0, sin yaw)
 // World facing of a character (on a moving boat or platform: its own yaw plus the platform's heading).

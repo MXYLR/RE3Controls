@@ -388,6 +388,7 @@ void LoadConfig() {
     c.zoomFovStep = GetFloat(path, "Zoom", "ZoomFovStep", c.zoomFovStep);
     c.zoomMaxStep = (int)GetFloat(path, "Zoom", "ZoomMaxStep", (float)c.zoomMaxStep);
     c.scopeLook = GetBool(path, "Zoom", "ScopeLook", c.scopeLook);
+    c.aimPitchSnap = GetBool(path, "Aim", "AimPitchSnap", c.aimPitchSnap);
     {
         char ib[16];
         GetPrivateProfileStringA("Controls", "InteractButton", "A", ib, sizeof(ib), path);
