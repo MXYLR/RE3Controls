@@ -113,15 +113,6 @@ static int CharacterKind(uint32_t character) {
     return (int)(((uint32_t(__cdecl*)(uint32_t))0x00715B90)(character) & 0xFFu);
 }
 static bool IsWesker(uint32_t character) { return CharacterKind(character) == 3; }
-// Wanted side (fc.charLeft) -> the two independent flags: the orbit camera side, and whether the game's own aim and
-// look-at poses have to be mirrored.  The game has a side per character (ShoulderGameLeftKinds, default only Chris on
-// the left), so the mirror is needed exactly when the wanted side is the other one.
-static void ShoulderApply(FreeCam& fc, uint32_t character, const Config& c) {
-    const int kind = CharacterKind(character);
-    const bool gameLeft = (kind >= 0 && kind < 32) ? ((c.shoulderGameCharLeftMask >> kind) & 1u) != 0 : true;
-    fc.leftShoulder = !fc.charLeft;
-    fc.mirrorAim = (fc.charLeft != gameLeft);
-}
 // Plain-gun zoom state, read by the camera through ZoomFovExtra().
 static int g_zoomStep = 0;
 static float g_zoomFov = 0.0f;
@@ -537,23 +528,10 @@ static void ApplyControls(uint32_t padObj, uint32_t character) {
     // Every local player has a free camera of their own (split screen: on their own camera controller, whatever
     // device each one plays with).
     FreeCam& fc = CamFor(character);
-    // Shoulder from the character.  Two things are kept apart:
-    //  - the ORBIT side (leftShoulder), always our own geometry: side = -1 puts the camera on the character's left,
-    //    which puts the character on the right of the frame;
-    //  - the AIM mirror, which flips the game's own aim/look-at poses.  The game already has a side per character
-    //    (Chris aims with the character on the left, Sheva on the right), so mirroring is only the INVERSE case:
-    //    the game's default for that kind is known from ShoulderGameLeftKinds.  Before this split, leftShoulder drove
-    //    both and Sheva ended up right in the orbit and left while aiming.
+    // Upstream semantics, nothing on top: fc.leftShoulder is the side, one flag for the orbit and the aim mirror.
+    // The per-character defaults (ShoulderAuto / ShoulderLeftKinds / ShoulderGameLeftKinds) and the runtime
+    // measurement are disabled; the keys still read as documented in the README.
     if (fc.character != character) {
-        if (c.shoulderAuto) {
-            const int kind = CharacterKind(character);
-            if (kind >= 0 && kind < 32) {
-                fc.charLeft = ((c.shoulderLeftMask >> kind) & 1u) != 0;
-                ShoulderApply(fc, character, c);
-                Log("shoulder: kind %d -> character on the %s of the screen (mirror %d)", kind,
-                    fc.charLeft ? "left" : "right", (int)fc.mirrorAim);
-            }
-        }
         g_zoomStep = 0;
         g_zoomFov = 0.0f;
     }
@@ -582,17 +560,15 @@ static void ApplyControls(uint32_t padObj, uint32_t character) {
         g_zoomFov = 0.0f;
     }
     // Keyboard shoulder key (Controls/ShoulderKey, default B): raw key, aiming or not, independent of the game's own
-    // bindings.  No kbm check: the raw read is harmless for a pad player and this is the one control that has to work
-    // in every state.  The pad keeps RB (L3 with RunButton=RB) through partnerBit below.
+    // bindings.  It flips the same single flag the pad uses (fc.leftShoulder), so walking and aiming always flip
+    // together, exactly as upstream's RB swap does.
     if (c.shoulderSwapAlways && c.shoulderKey[0] && !At<uint8_t>(character, ch::Scope)) {
         const int vk = toupper((unsigned char)c.shoulderKey[0]);
         const bool down = vk > 0 && (GetAsyncKeyState(vk) & 0x8000) != 0;
         static bool keyPrev = false;
         if (down && !keyPrev) {
-            fc.charLeft = !fc.charLeft;
-            ShoulderApply(fc, character, c);
-            Log("shoulder: key '%c' -> character on the %s (mirror %d)", vk, fc.charLeft ? "left" : "right",
-                (int)fc.mirrorAim);
+            fc.leftShoulder = !fc.leftShoulder;
+            Log("shoulder: key '%c' -> %s shoulder", vk, fc.leftShoulder ? "left" : "right");
         }
         keyPrev = down;
     }

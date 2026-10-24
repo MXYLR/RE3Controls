@@ -494,26 +494,10 @@ static void __fastcall HookQfpsUpdate(uint32_t self, void* edx, uint32_t arg) {
         At<float>(self, cam::LookH) = 0.0f;
     }
     PoseMirror mirror;
-    // Aim side: measured ONCE per aim, on the first frame of the aim, while nothing is mirrored (mirrorAim is cleared
-    // whenever the aim is off).  Measuring every frame fed our own mirror back into the game's rig pose: the pose x
-    // alternated between +40 and -40, the measurement flipped with it and the mirror oscillated (the log showed
-    // "+40, -40, +40" within one fight).  The game's pose block is in character space with +X to the character's
-    // LEFT, so eye.x < 0 means the camera sits on the character's right and the character stands on the left.
-    if (At<uint8_t>(self, cam::AimRig) == 1) {
-        if (!fc.aimSideKnown) {
-            const uint32_t pp = At<uint32_t>(self, kPosePtrs + 3 * 4);  // first of the three aim poses
-            const float* pose = Readable((void*)pp, 0x28) ? (const float*)pp : (const float*)(self + kInlinePoses[3]);
-            fc.gameCharLeft = pose[0] < 0.0f;
-            fc.aimSideKnown = true;
-            Log("shoulder: game aims with the character on the %s (pose x %+.1f, latched)", fc.gameCharLeft ? "left" : "right",
-                pose[0]);
-        }
-        fc.mirrorAim = (fc.charLeft != fc.gameCharLeft);
-    } else {
-        fc.aimSideKnown = false;
-        fc.mirrorAim = false;  // nothing mirrored outside the aim, so the next measurement reads the game's own pose
-    }
-    if (fc.mirrorAim) mirror.Apply(self);
+    // Back to upstream's rule: one flag, leftShoulder, drives the orbit AND mirrors the game's aim/look-at poses.  The
+    // per-character defaults and the runtime measurement added on top of it kept disagreeing with the game's own side
+    // and with each other; both are gone.  What remains is exactly the behaviour the upstream mod ships.
+    if (fc.leftShoulder) mirror.Apply(self);
     // Aim pitch hand-off, measured from the aimdbg samples: the game's vertical look channel (cam::LookV) tracks
     // the view pitch as  lookV = -pitch / 55 deg  (camPitch -16.3 deg -> lookV +0.319, -27.6 -> +0.509).  Carrying
     // the orbit pitch here, before the game's own camera update, makes the aim start where the player was looking;

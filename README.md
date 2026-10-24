@@ -96,11 +96,10 @@ Beyond upstream v1.9 and notencio's v1.9.4 fixes, this build adds:
 - Outside the aim the knife stays on the physical **LB**, so giving RB to the
   shoulder does not remove the knife.
 - In a scope the key is the `ScopeWalk` zoom button instead.
-- Per-character default side (`[Camera] ShoulderAuto=1`, `ShoulderLeftKinds`):
-  the default puts the character on the **left of the screen** for kind 0
-  (Chris) and on the right for kind 1 (Sheva). A mask bit means "the character
-  stands on the left of the screen". The log prints the kind once
-  (`shoulder: kind N -> ...`), so the table can be corrected from one run.
+- One side flag for everything (upstream semantics): the orbit camera and the
+  game's own aim/look-at poses always flip together, so the character keeps the
+  same side while walking and aiming. Per-character defaults were removed again:
+  they kept disagreeing with the side the game itself uses.
 
 ### Plain-gun zoom
 
