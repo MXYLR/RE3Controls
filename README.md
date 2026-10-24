@@ -101,8 +101,8 @@ Beyond upstream v1.9 and notencio's v1.9.4 fixes, this build adds:
   - the walking camera uses it directly;
   - the game's own aim poses are mirrored only when needed.
   The game aims with a side of its own per character (Chris and Sheva differ), so
-  that side is measured at the start of each aim 鈥?three consecutive frames with
-  the same sign, never while mirroring 鈥?and remembered. The log prints it once:
+  that side is measured at the start of each aim 閳?three consecutive frames with
+  the same sign, never while mirroring 閳?and remembered. The log prints it once:
   `shoulder: game aims with the character on the left (pose x -40.0)`.
 - The key is read raw, so it is independent of the game's own button bindings,
   and a press is consumed for that frame (a key that is also bound to another
@@ -130,3 +130,29 @@ gamepad players are unaffected.
 - The quick knife slash can be turned with the mouse / right stick.
 - Aim pitch is inherited from the free camera, and the view no longer snaps back
   to the pre-aim pitch after aiming.
+
+---
+
+## Known issues in this build
+
+- **Sniper scope aim.** The scope is drawn by the weapon camera (`uCameraWep`) whose
+  aim is its own state. Writing the shot point (`ch+0x2700`) or the aim point
+  (`ch+0x2870`) does not reach it, so the scope starts at the game's own direction
+  instead of the free camera's. Finding the field needs static analysis of the
+  weapon-camera path.
+- **Knife aim** is seeded on every change of knife action id and only horizontally
+  (a slash has no useful vertical aim); vertical targets are not tracked.
+- Five hooks cannot be installed where RE5Fix patched the entries (camera ctrl,
+  bind-slot, camera aim ray, pad aim, reticle request). The mod works without them,
+  with the leg-layer mask applied at setMotion instead of in the bind callback.
+
+## Defaults in this build
+
+| Setting | Value |
+|---|---|
+| Shoulder | keyboard **B** (`[Controls] ShoulderKey`), pad **RB** (L3 with `RunButton=RB`), any time |
+| Plain-gun zoom | **F** in, **C** out, `[Zoom] ZoomFovStep=-20`, `ZoomMaxStep=3` |
+| Scoped walking | `ScopeWalk=1` (zoom on RB + stick) |
+| Reload / switch on the move | `ReloadWalk=1`, `SwitchWalk=1` |
+| Aim walking | `GunWalk=1`, `KnifeWalk=1` |
+| Free camera | `FreeCamera=1`, `Shoulder=45`-`60`, `AimDistance=100` |
