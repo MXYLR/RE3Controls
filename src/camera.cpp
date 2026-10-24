@@ -563,7 +563,14 @@ static void __fastcall HookQfpsUpdate(uint32_t self, void* edx, uint32_t arg) {
             fc.mirrorAim = false;  // never outside the aim: the measurement below must read the game's own pose
         }
     }
-    if (fc.mirrorAim) mirror.Apply(self);
+    // Never mirror in a scope: the scope is drawn by the weapon camera (uCameraWep) with its own poses, so flipping
+    // the QFPS poses there is not what the player sees - it only fights the weapon camera and showed up as a twitch
+    // when moving while scoped.
+    if (fc.mirrorAim) {
+        const uint32_t chM = At<uint32_t>(self, cam::Parent);
+        const bool scopedM = chM && Readable((void*)chM, 0x3000) && At<uint8_t>(chM, ch::Scope) != 0;
+        if (!scopedM) mirror.Apply(self);
+    }
     // Aim pitch hand-off, measured from the aimdbg samples: the game's vertical look channel (cam::LookV) tracks
     // the view pitch as  lookV = -pitch / 55 deg  (camPitch -16.3 deg -> lookV +0.319, -27.6 -> +0.509).  Carrying
     // the orbit pitch here, before the game's own camera update, makes the aim start where the player was looking;
