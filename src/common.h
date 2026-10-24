@@ -3,7 +3,7 @@
 
 // Developer build (build.sh dev): dev server, shared-memory bridge with a virtual pad, screenshots. Release builds
 // leave all of it out.
-#define RE3C_VERSION_STR "1.9.4-mod10"
+#define RE3C_VERSION_STR "1.9.4-mod11"
 
 #ifndef RE3C_DEV
 #define RE3C_DEV 0
@@ -121,7 +121,11 @@ inline bool Readable(const void* p, size_t n) {
     MEMORY_BASIC_INFORMATION mbi;
     if (!VirtualQuery(p, &mbi, sizeof(mbi))) return false;
     if (mbi.State != MEM_COMMIT || (mbi.Protect & (PAGE_GUARD | PAGE_NOACCESS))) return false;
-    const DWORD readable = PAGE_READONLY | PAGE_READWRITE | PAGE_WRITECOPY | PAGE_EXECUTE_READ |
+    // PAGE_EXECUTE is included on purpose: on x86 a user-mode execute-only page is still readable, and the game maps
+    // some code pages that way.  Without it every SafeEqual() signature check on such a page failed and the hooks
+    // behind it were skipped (one run showed camera ctrl, bind-slot, camera aim ray, pad aim and the reticle all
+    // failing while the neighbouring functions hooked fine).
+    const DWORD readable = PAGE_READONLY | PAGE_READWRITE | PAGE_WRITECOPY | PAGE_EXECUTE | PAGE_EXECUTE_READ |
                            PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY;
     if (!(mbi.Protect & readable)) return false;
     const uintptr_t rbase = (uintptr_t)mbi.BaseAddress;

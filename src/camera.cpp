@@ -630,31 +630,8 @@ static void __fastcall HookQfpsUpdate(uint32_t self, void* edx, uint32_t arg) {
             if (fc.pitch > Rad(55.0f)) fc.pitch = Rad(55.0f);
             if (fc.pitch < Rad(-40.0f)) fc.pitch = Rad(-40.0f);
         }
-        // INSTRUMENTATION (temporary): every 250 ms while aiming, dump the candidate channels for the aim pitch so
-        // the real one can be identified from one run instead of by trial.  Compare camPitch (the view, which the
-        // player sees) against lookV / ch2908 / ch290C; the field that tracks the view while the mouse goes up and
-        // down is the one to write.
-        if (At<uint8_t>(self, cam::AimRig) == 1) {
-            static double aimLogT[4] = {};
-            const double tNow2 = NowSec();
-            if (tNow2 - aimLogT[idx] > 0.25) {
-                aimLogT[idx] = tNow2;
-                const uint32_t chA = At<uint32_t>(self, cam::Parent);
-                const float lenA = sqrtf(dx * dx + dz * dz);
-                float camPitchA = lenA > 0.001f ? atan2f(eye[1] - tgt[1], lenA) : 0.0f;
-                float a2908 = 0.0f, a290C = 0.0f, a2994 = 0.0f;
-                bool scope = false;
-                if (chA && Readable((void*)chA, 0x3000)) {
-                    a2908 = At<float>(chA, 0x2908);
-                    a290C = At<float>(chA, 0x290C);
-                    a2994 = At<float>(chA, 0x2994);
-                    scope = At<uint8_t>(chA, ch::Scope) != 0;
-                }
-                Log("aimdbg lookV=%.3f lookH=%.3f camPitch=%+.1f fcPitch=%+.1f ch2908=%+.1f ch290C=%+.1f ch2994=%+.1f scope=%d",
-                    At<float>(self, cam::LookV), At<float>(self, cam::LookH), camPitchA * 57.3f,
-                    g_cams[idx].pitch * 57.3f, a2908 * 57.3f, a290C * 57.3f, a2994 * 57.3f, (int)scope);
-            }
-        }
+        // (The temporary aimdbg dump that used to run here every 250 ms has been removed: it was only for finding
+        // the pitch channel, and it filled RE3Controls.log during every aim.)
     }
     // Blend for a moment whenever the camera changes hands, from wherever the last frame left it.
     // Mode=MeleeCamera blends the hand-over to and from the game's camera itself. In the full mode the camera
