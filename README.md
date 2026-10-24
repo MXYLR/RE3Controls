@@ -96,11 +96,19 @@ Beyond upstream v1.9 and notencio's v1.9.4 fixes, this build adds:
 - Outside the aim the knife stays on the physical **LB**, so giving RB to the
   shoulder does not remove the knife.
 - In a scope the key is the `ScopeWalk` zoom button instead.
-- One side flag for everything (upstream semantics): the orbit camera and the
-  game's own aim/look-at poses always flip together, so the character keeps the
-  same side while walking and aiming. Per-character defaults were removed again:
-  they kept disagreeing with the side the game itself uses.
-
+- One wanted side ("the character stands on the left of the screen", default
+  left) drives both views:
+  - the walking camera uses it directly;
+  - the game's own aim poses are mirrored only when needed.
+  The game aims with a side of its own per character (Chris and Sheva differ), so
+  that side is measured at the start of each aim 鈥?three consecutive frames with
+  the same sign, never while mirroring 鈥?and remembered. The log prints it once:
+  `shoulder: game aims with the character on the left (pose x -40.0)`.
+- The key is read raw, so it is independent of the game's own button bindings,
+  and a press is consumed for that frame (a key that is also bound to another
+  action cannot toggle the side twice).
+- `ShoulderAuto`, `ShoulderLeftKinds` and `ShoulderGameLeftKinds` from earlier
+  test builds are ignored now.
 ### Plain-gun zoom
 
 While aiming a gun (not a scope) the keyboard zooms:
@@ -122,8 +130,3 @@ gamepad players are unaffected.
 - The quick knife slash can be turned with the mouse / right stick.
 - Aim pitch is inherited from the free camera, and the view no longer snaps back
   to the pre-aim pitch after aiming.
-Note: `[Camera] ShoulderGameLeftKinds` (bit per character kind, **empty by
-default**) tells the mod which side the GAME itself aims with. RE5's own aim puts
-the character on the **right** for every character, so the list is empty unless a
-character differs. The aim camera is mirrored only when the wanted side differs
-from that default, so the view no longer changes side between walking and aiming.
