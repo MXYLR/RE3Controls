@@ -502,7 +502,15 @@ static void __fastcall HookQfpsUpdate(uint32_t self, void* edx, uint32_t arg) {
     {
         static uint8_t sideFrames[4] = {};
         static bool sideValue[4] = {};
+        static uint32_t sideFor[4] = {};
         const bool rigNow = At<uint8_t>(self, cam::AimRig) == 1;
+        // The measurement is remembered per character: repeating it on every aim made the first frames of each aim
+        // run unmirrored and then snap over, which is the twitch that showed up now and then.
+        if (sideFor[idx] != fc.character) {
+            sideFor[idx] = fc.character;
+            fc.aimSideKnown = false;
+            sideFrames[idx] = 0;
+        }
         if (rigNow) {
             if (!fc.aimSideKnown) {
                 const uint32_t pp = At<uint32_t>(self, kPosePtrs + 3 * 4);  // first of the three aim poses
@@ -523,9 +531,8 @@ static void __fastcall HookQfpsUpdate(uint32_t self, void* edx, uint32_t arg) {
             }
             fc.mirrorAim = fc.aimSideKnown && (fc.charLeft != fc.gameCharLeft);
         } else {
-            fc.aimSideKnown = false;
             sideFrames[idx] = 0;
-            fc.mirrorAim = false;  // never outside the aim: the next measurement must read the game's own pose
+            fc.mirrorAim = false;  // never outside the aim: the measurement below must read the game's own pose
         }
     }
     if (fc.mirrorAim) mirror.Apply(self);
@@ -548,17 +555,10 @@ static void __fastcall HookQfpsUpdate(uint32_t self, void* edx, uint32_t arg) {
         }
         g_lastAimRig[idx] = rigNow;
     }
-    // Post-update: plant the pitch in the character's aim state for the first frames of the aim.  These are the
-    // writes the "basically done" build had; they are kept in addition to the look channel.
-    if (g_aimSeedFrames[idx] > 0 && At<uint8_t>(self, cam::AimRig) == 1) {
-        const uint32_t chS = At<uint32_t>(self, cam::Parent);
-        if (chS && Readable((void*)chS, 0x3000)) {
-            At<float>(chS, 0x2908) = fc.pitch;
-            At<float>(chS, 0x290C) = fc.pitch;
-            if (g_aimSeedFrames[idx] == 3) Log("aim seed: ch2908/ch290C <- %+.1f deg", fc.pitch * 57.3f);
-        }
-        g_aimSeedFrames[idx]--;
-    }
+    // The old post-update seed of ch+0x2908/+0x290C is gone.  Those are NOT the aim pitch: when they were written the
+    // values accumulated (+91.7, +103.1 deg), i.e. they are angles that the game keeps adding to, and writing them for
+    // the first frames of every aim is one of the things that made the character twitch when aiming started.
+    g_aimSeedFrames[idx] = 0;
     ViewEdit view;
     view.Before(self);
     SetEscapeEar(self, idx, fc.leftShoulder);
