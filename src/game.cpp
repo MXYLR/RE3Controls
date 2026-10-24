@@ -118,11 +118,10 @@ static int g_zoomStep = 0;
 static float g_zoomFov = 0.0f;
 static bool g_zoomFPrev = false, g_zoomCPrev = false;
 float ZoomFovExtra() { return g_zoomFov; }
-// The wanted shoulder side ("the character stands on the left of the screen"), kept OUTSIDE the camera state so that
-// the paths which hand the camera back to the game (character change, cover, mounted guns) cannot silently reset the
-// player's choice.  Indexed by the player slot, valid while the character pointer stays the same.
-static bool g_charLeft[4] = {true, true, true, true};
-static uint32_t g_charLeftFor[4] = {0, 0, 0, 0};
+// The wanted shoulder side ("the character stands on the left of the screen").  One local player, one value: it is
+// NOT reset by a character change or by the camera state being handed back to the game, because those happen between
+// two presses (the log showed every press starting from the same side again).
+static bool g_charLeftSide = true;
 
 // Whether the game would reload now: its own test before a reload (0xB83E67) - the item in hand (0xC4B700(inv, 0xE))
 // is a gun whose magazine is not full and that has spare ammo (0xC4DE50). Without the expected code: always.
@@ -533,12 +532,6 @@ static void ApplyControls(uint32_t padObj, uint32_t character) {
     // Every local player has a free camera of their own (split screen: on their own camera controller, whatever
     // device each one plays with).
     FreeCam& fc = CamFor(character);
-    // The wanted side lives outside the camera state; a new character starts on the left.
-    const int slotNow = At<uint8_t>(character, ch::NetSlot) & 3;
-    if (g_charLeftFor[slotNow] != character) {
-        g_charLeftFor[slotNow] = character;
-        g_charLeft[slotNow] = true;
-    }
     if (fc.character != character) {
         g_zoomStep = 0;
         g_zoomFov = 0.0f;
@@ -575,15 +568,16 @@ static void ApplyControls(uint32_t padObj, uint32_t character) {
         const bool down = vk > 0 && (GetAsyncKeyState(vk) & 0x8000) != 0;
         static bool keyPrev = false;
         if (down && !keyPrev) {
-            g_charLeft[slotNow] = !g_charLeft[slotNow];
-            Log("shoulder: key '%c' -> character %s", vk, g_charLeft[slotNow] ? "left" : "right");
+            g_charLeftSide = !g_charLeftSide;
+            Log("shoulder: key '%c' -> character %s (leftShoulder %d, mirrorAim %d)", vk,
+                g_charLeftSide ? "left" : "right", (int)!g_charLeftSide, (int)g_charLeftSide);
         }
         keyPrev = down;
     }
     // Derive the two mechanisms from the wanted side, every frame.  The contexts below (mounted guns, the original
     // button layout, cover) clear them again for their own frames, which is what we want: they hand the camera back
     // to the game.  Outside them the player's choice always wins.
-    fc.charLeft = g_charLeft[slotNow];
+    fc.charLeft = g_charLeftSide;
     fc.leftShoulder = !fc.charLeft;
     fc.mirrorAim = fc.charLeft;
     // ch+0x2D8C: 0x4000 riding something, with 0x80 a gun emplacement, 0x40 the jeep gun, 0x20 the airboat driver
@@ -658,9 +652,9 @@ static void ApplyControls(uint32_t padObj, uint32_t character) {
         // works whether aiming or not, like a modern TPS: the physical LB keeps the knife outside the aim and the
         // RB-to-knife forwarding is gone.  In a scope the key stays the ScopeWalk zoom button.
         if (c.shoulderSwapAlways) {
-            if ((physTrg & partnerBit) && !At<uint8_t>(character, ch::Scope)) { g_charLeft[slotNow] = !g_charLeft[slotNow]; }
+            if ((physTrg & partnerBit) && !At<uint8_t>(character, ch::Scope)) { g_charLeftSide = !g_charLeftSide; }
         } else if (aimHeld) {
-            if ((physTrg & partnerBit) && !At<uint8_t>(character, ch::Scope)) { g_charLeft[slotNow] = !g_charLeft[slotNow]; }
+            if ((physTrg & partnerBit) && !At<uint8_t>(character, ch::Scope)) { g_charLeftSide = !g_charLeftSide; }
         } else if (phys & partnerBit) {
             out |= P_LB;
         }
