@@ -123,10 +123,23 @@ static float Wrap(float a) {
     return a;
 }
 
+static void MaskSlot(const LegLayer& L, uint32_t slot);  // applied from SetMotion, defined further down
+
 static bool SetMotion(uint32_t ch, uint32_t slot, uint32_t no, float inter, float start = 0.0f, float speed = 1.0f) {
     g_ownCall = true;
     bool r = (oSetMotion ? oSetMotion : (PFN_SetMotion)kFnSetMotion)(ch, nullptr, slot, no, inter, start, speed, 0);
     g_ownCall = false;
+    // Mask the freshly bound clip right away.  The bind callback (0xB798B0) does this before the frame is evaluated,
+    // but on machines where RE5Fix patched that entry the hook cannot install, and then the first frame of every new
+    // clip is full-body - the character jumps for one frame exactly when it starts moving (reported in the scope).
+    if (r && (slot == kLegSlot || slot == kSlotFB)) {
+        for (auto& L : g_layers) {
+            if (L.active && L.ch == ch && L.jointCount) {
+                MaskSlot(L, slot);
+                break;
+            }
+        }
+    }
     return r;
 }
 

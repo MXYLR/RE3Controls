@@ -718,7 +718,8 @@ static void ApplyControls(uint32_t padObj, uint32_t character) {
             S.reload = ReloadPhase::Request;
             S.reloadT = 0;
             S.reloadTries = 0;
-            S.reloadMove = !aiming && !(ride & 0xF00);
+            S.reloadMove = (!aiming || (At<uint8_t>(character, ch::Scope) != 0 && c.scopeWalk && c.reloadWalk)) &&
+                       !(ride & 0xF00);
         }
         S.reloadT += dt;
         // The prompt check may come after the pad in a frame: a request that meets an X prompt right away is dropped.
@@ -750,7 +751,8 @@ static void ApplyControls(uint32_t padObj, uint32_t character) {
     } else {
         S.reload = ReloadPhase::Idle;  // switched off in the ini meanwhile
     }
-    if (S.reloadMove && (aimHeld || (S.reload == ReloadPhase::Idle && !AimWalkState(character)))) S.reloadMove = false;
+    if (S.reloadMove && ((aimHeld && At<uint8_t>(character, ch::Scope) == 0) ||
+                          (S.reload == ReloadPhase::Idle && !AimWalkState(character)))) S.reloadMove = false;
     const bool reloadMove = S.reloadMove;
     // Switching weapons (d-pad, keys 1-9, the wheel): the switch plays standing; the leg layer keeps walking, as for
     // a reload on the move. While aiming, the aim walk carries on through the switch by itself (SwitchWalk too).
