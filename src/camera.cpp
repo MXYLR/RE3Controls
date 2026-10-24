@@ -494,10 +494,41 @@ static void __fastcall HookQfpsUpdate(uint32_t self, void* edx, uint32_t arg) {
         At<float>(self, cam::LookH) = 0.0f;
     }
     PoseMirror mirror;
-    // Back to upstream's rule: one flag, leftShoulder, drives the orbit AND mirrors the game's aim/look-at poses.  The
-    // per-character defaults and the runtime measurement added on top of it kept disagreeing with the game's own side
-    // and with each other; both are gone.  What remains is exactly the behaviour the upstream mod ships.
-    if (fc.leftShoulder) mirror.Apply(self);
+    // The game's own aim side is per character (in game, Chris aims with the character on one side, Sheva the other),
+    // so a fixed rule is wrong for one of them.  It is measured instead, but only while NOT mirroring and only during
+    // the aim, over three consecutive frames of the same sign, so the mirror cannot feed back into its own measurement
+    // (that feedback made the pose x alternate +40/-40 in an earlier build).  Until it is known the aim is not
+    // mirrored at all.
+    {
+        static uint8_t sideFrames[4] = {};
+        static bool sideValue[4] = {};
+        const bool rigNow = At<uint8_t>(self, cam::AimRig) == 1;
+        if (rigNow) {
+            if (!fc.aimSideKnown) {
+                const uint32_t pp = At<uint32_t>(self, kPosePtrs + 3 * 4);  // first of the three aim poses
+                const float* pose = Readable((void*)pp, 0x28) ? (const float*)pp : (const float*)(self + kInlinePoses[3]);
+                const bool side = pose[0] < 0.0f;  // +X is the character's left: eye.x < 0 => character on the left
+                if (sideFrames[idx] == 0 || side != sideValue[idx]) {
+                    sideValue[idx] = side;
+                    sideFrames[idx] = 1;
+                } else if (sideFrames[idx] < 3) {
+                    ++sideFrames[idx];
+                }
+                if (sideFrames[idx] >= 3) {
+                    fc.gameCharLeft = side;
+                    fc.aimSideKnown = true;
+                    Log("shoulder: game aims with the character on the %s (pose x %+.1f)", side ? "left" : "right",
+                        pose[0]);
+                }
+            }
+            fc.mirrorAim = fc.aimSideKnown && (fc.charLeft != fc.gameCharLeft);
+        } else {
+            fc.aimSideKnown = false;
+            sideFrames[idx] = 0;
+            fc.mirrorAim = false;  // never outside the aim: the next measurement must read the game's own pose
+        }
+    }
+    if (fc.mirrorAim) mirror.Apply(self);
     // Aim pitch hand-off, measured from the aimdbg samples: the game's vertical look channel (cam::LookV) tracks
     // the view pitch as  lookV = -pitch / 55 deg  (camPitch -16.3 deg -> lookV +0.319, -27.6 -> +0.509).  Carrying
     // the orbit pitch here, before the game's own camera update, makes the aim start where the player was looking;
