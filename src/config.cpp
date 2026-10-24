@@ -125,7 +125,7 @@ static const char kDefaultIni[] =
 "          ; bit 0 = Chris (character on the left), bit 1 = Sheva (character on the right by default)\r\n"
 "          ShoulderLeftKinds=0\r\n"
 "          ; sides the GAME itself uses (bit per kind): default bit 0 = Chris aims with the character left, Sheva right\r\n"
-"          ShoulderGameLeftKinds=0\r\n"
+"          ShoulderGameLeftKinds=\r\n"
 "          ; F zooms in and C zooms out while aiming a plain gun (not the scope)\r\n"
 "          ZoomKeys=1\r\n"
 "          ZoomFovStep=-14\r\n"
@@ -367,7 +367,7 @@ void LoadConfig() {
     }
     {
         char km[64];
-        GetPrivateProfileStringA("Camera", "ShoulderGameLeftKinds", "0", km, sizeof(km), path);
+        GetPrivateProfileStringA("Camera", "ShoulderGameLeftKinds", "", km, sizeof(km), path);
         unsigned mask = 0;
         for (const char* p = km; *p;) {
             while (*p == ' ' || *p == ',' || *p == ';') ++p;
@@ -376,7 +376,7 @@ void LoadConfig() {
             while (*p >= '0' && *p <= '9') v = v * 10 + (*p++ - '0');
             if (v >= 0 && v < 32) mask |= 1u << v;
         }
-        if (mask) c.shoulderGameCharLeftMask = mask;
+        c.shoulderGameCharLeftMask = mask;  // empty / none = every character is game-right, which is RE5's default
     }
     c.zoomKeys = GetBool(path, "Aim", "ZoomKeys", c.zoomKeys);
     c.zoomFovStep = GetFloat(path, "Aim", "ZoomFovStep", c.zoomFovStep);

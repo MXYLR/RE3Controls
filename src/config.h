@@ -38,7 +38,7 @@ struct Config {
     bool shoulderSwapAlways = true; // the shoulder key works outside the aim too (knife stays on LB)
     char shoulderKey[8] = "B";      // keyboard key that swaps the shoulder (letters A-Z, read raw)
     unsigned shoulderLeftMask = 1u; // bit per character kind (0x715B90) whose CHARACTER is on the LEFT of the screen
-    unsigned shoulderGameCharLeftMask = 1u; // bit per kind: the GAME's own aim side puts the character on the left
+    unsigned shoulderGameCharLeftMask = 0u; // bit per kind: the GAME's own aim side puts the character on the LEFT (RE5: none)
     bool zoomKeys = true;           // F zooms in and C zooms out while aiming a plain gun
     float zoomFovStep = -14.0f;     // degrees of fov per zoom step (negative = closer)
     int zoomMaxStep = 2;            // highest zoom step (2 = two presses)
