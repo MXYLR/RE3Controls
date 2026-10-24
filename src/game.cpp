@@ -1052,18 +1052,19 @@ static void ApplyControls(uint32_t padObj, uint32_t character) {
         if (knifeState && knifePrev[kSlot] != actionId) {
             float pos[3];
             CharacterWorldPos(character, pos);
-            const float cy3 = cosf(fc.pitch), sy3 = sinf(fc.pitch);
-            const float px = pos[0] + sinf(fc.yaw) * cy3 * 4000.0f;
-            const float py = pos[1] + 90.0f - sy3 * 4000.0f;
-            const float pz = pos[2] + cosf(fc.yaw) * cy3 * 4000.0f;
+            // Horizontal only: a knife swing is a melee action, it has no useful vertical aim, and fc.pitch is at one
+            // of its clamps (+55 / -40) whenever the game owns the aim camera - seeding that made the aim point jump
+            // between the sky and the floor, which is why the knife only "sometimes" pointed along the camera.
+            const float px = pos[0] + sinf(fc.yaw) * 4000.0f;
+            const float py = pos[1] + 90.0f;
+            const float pz = pos[2] + cosf(fc.yaw) * 4000.0f;
             At<float>(character, 0x2870) = px;
             At<float>(character, 0x2874) = py;
             At<float>(character, 0x2878) = pz;
             At<float>(character, 0x2700) = px;
             At<float>(character, 0x2704) = py;
             At<float>(character, 0x2708) = pz;
-            Log("knife: aim point seeded for action %02X (yaw %.1f, pitch %.1f)", actionId, fc.yaw * 57.3f,
-                fc.pitch * 57.3f);
+            Log("knife: aim point seeded for action %02X (yaw %.1f)", actionId, fc.yaw * 57.3f);
         }
         knifePrev[kSlot] = knifeState ? actionId : 0xFFFFFFFFu;
     }
