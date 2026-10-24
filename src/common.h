@@ -3,7 +3,7 @@
 
 // Developer build (build.sh dev): dev server, shared-memory bridge with a virtual pad, screenshots. Release builds
 // leave all of it out.
-#define RE3C_VERSION_STR "1.9.4-mod25"
+#define RE3C_VERSION_STR "1.9.4-mod26"
 
 #ifndef RE3C_DEV
 #define RE3C_DEV 0
@@ -144,9 +144,27 @@ inline bool SafeEqual(const void* p, const void* sig, size_t n) {
 // detour on top of it, and skipping the hook silently degraded whole features (bind-slot = the leg layer, pad aim).
 inline bool HookSite(const void* p, const void* sig, size_t n) {
     if (SafeEqual(p, sig, n)) return true;
-    if (!Readable(p, 1)) return false;
-    const uint8_t b = *(const uint8_t*)p;
-    return b == 0xE9 || b == 0xEB;
+    if (!Readable(p, 1)) {
+        Log("hook site %08x: not readable", (unsigned)(uintptr_t)p);
+        return false;
+    }
+    const uint8_t* b = (const uint8_t*)p;
+    if (b[0] == 0xE9 || b[0] == 0xEB) return true;  // someone else hooked it: chain on top
+    // Not our code at all: print what is there so the patch can be adapted instead of guessed.  The bytes before the
+    // first mismatch are printed as well, because RE5Fix often leaves the prologue intact and changes a later byte.
+    char want[3 * 16 + 1] = {}, got[3 * 16 + 1] = {};
+    const size_t shown = n < 16 ? n : 16;
+    for (size_t i = 0; i < shown; ++i) {
+        const char* hex = "0123456789ABCDEF";
+        want[i * 3] = hex[((const uint8_t*)sig)[i] >> 4];
+        want[i * 3 + 1] = hex[((const uint8_t*)sig)[i] & 15];
+        want[i * 3 + 2] = ' ';
+        got[i * 3] = hex[b[i] >> 4];
+        got[i * 3 + 1] = hex[b[i] & 15];
+        got[i * 3 + 2] = ' ';
+    }
+    Log("hook site %08x differs: want %s / have %s", (unsigned)(uintptr_t)p, want, got);
+    return false;
 }
 BridgeShared* Bridge();
 void InitBridge();
