@@ -506,14 +506,14 @@ void InitCrosshairHooks() {
     else
         Log("hook cockpit reticle failed");
     static const BYTE sigCamRay[] = {0x55, 0x8B, 0xEC, 0x83, 0xE4, 0xF0, 0x81, 0xEC, 0x94, 0x00, 0x00, 0x00, 0x53, 0x56, 0x8B, 0xF1};
-    if (SafeEqual((void*)kFnCameraAimRay, sigCamRay, sizeof(sigCamRay)) &&
+    if (HookSite((void*)kFnCameraAimRay, sigCamRay, sizeof(sigCamRay)) &&
         MH_CreateHook((void*)kFnCameraAimRay, (void*)HookCameraAimRay, (void**)&oCameraAimRay) == MH_OK &&
         MH_QueueEnableHook((void*)kFnCameraAimRay) == MH_OK)
         Log("hook camera aim ray at %08x", kFnCameraAimRay);
     else
         Log("hook camera aim ray failed");
     static const BYTE sigPadAim[] = {0x55, 0x8B, 0xEC, 0x83, 0xE4, 0xF0, 0x83, 0xEC, 0x64, 0x53, 0x56, 0x57};
-    if (SafeEqual((void*)kFnPadAim, sigPadAim, sizeof(sigPadAim)) &&
+    if (HookSite((void*)kFnPadAim, sigPadAim, sizeof(sigPadAim)) &&
         MH_CreateHook((void*)kFnPadAim, (void*)HookPadAim, (void**)&oPadAim) == MH_OK &&
         MH_QueueEnableHook((void*)kFnPadAim) == MH_OK)
         Log("hook pad aim (direct horizontal, aim speed) at %08x", kFnPadAim);
@@ -529,7 +529,7 @@ void InitCrosshairHooks() {
     // push ecx / push esi / mov esi,ecx / cmp byte [esi+2998h],1 / jz ... ; the tail: mov ecx,[esi+2640h] -> 0x9ED350
     static const BYTE sigReq[] = {0x51, 0x56, 0x8B, 0xF1, 0x80, 0xBE, 0x98, 0x29, 0x00, 0x00, 0x01, 0x0F, 0x84};
     static const BYTE sigReqTail[] = {0x8B, 0x8E, 0x40, 0x26, 0x00, 0x00, 0xC6, 0x86, 0x18, 0x29, 0x00, 0x00, 0x01, 0xE8};
-    if (SafeEqual((void*)kFnReticleRequest, sigReq, sizeof(sigReq)) &&
+    if (HookSite((void*)kFnReticleRequest, sigReq, sizeof(sigReq)) &&
         SafeEqual((void*)0x00B69A98, sigReqTail, sizeof(sigReqTail)) &&
         MH_CreateHook((void*)kFnReticleRequest, (void*)HookReticleRequest, (void**)&oReticleRequest) == MH_OK &&
         MH_QueueEnableHook((void*)kFnReticleRequest) == MH_OK)

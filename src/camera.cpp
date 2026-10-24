@@ -691,7 +691,7 @@ void InitCameraHooks() {
     else
         Log("hook QFPS update failed");
     static const BYTE sigCtrl[] = {0x55, 0x8B, 0xEC, 0x83, 0xE4, 0xF0, 0x83, 0xEC, 0x74, 0x53, 0x56, 0x8B, 0xF1};
-    if (SafeEqual((void*)kFnCameraCtrlUpdate, sigCtrl, sizeof(sigCtrl)) &&
+    if (HookSite((void*)kFnCameraCtrlUpdate, sigCtrl, sizeof(sigCtrl)) &&
         MH_CreateHook((void*)kFnCameraCtrlUpdate, (void*)HookCtrlUpdate, (void**)&oCtrlUpdate) == MH_OK &&
         MH_QueueEnableHook((void*)kFnCameraCtrlUpdate) == MH_OK)
         Log("hook camera ctrl update at %08x", kFnCameraCtrlUpdate);

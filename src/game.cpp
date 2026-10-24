@@ -1320,7 +1320,11 @@ static bool CodeMatches(uint32_t addr, const BYTE* sig, size_t n) {
                      PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY;
     if (!(mbi.Protect & ok)) return false;
     if ((const BYTE*)addr + n > (const BYTE*)mbi.BaseAddress + mbi.RegionSize) return false;
-    return memcmp((void*)addr, sig, n) == 0;
+    if (memcmp((void*)addr, sig, n) == 0) return true;
+    // Another component (RE5Fix's dinput8.dll) may already have hooked the entry.  A jump there is still hookable:
+    // MinHook chains on top of it.  Without this the ActionSlot hook was skipped in every session.
+    const uint8_t b0 = *(const uint8_t*)addr;
+    return b0 == 0xE9 || b0 == 0xEB;
 }
 
 static bool HookAt(uint32_t addr, const BYTE* expect, size_t n, void* detour, void** orig, const char* name) {

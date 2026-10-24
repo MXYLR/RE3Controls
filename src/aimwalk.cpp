@@ -1217,7 +1217,7 @@ void InitAimWalkHooks() {
         MH_QueueEnableHook((void*)kFnModelBlend) == MH_OK)
         Log("hook uModel blend at %08x", kFnModelBlend);
     static const BYTE sigBind[] = {0x83, 0x7C, 0x24, 0x04, 0x07, 0x56, 0x8B, 0xF1, 0x0F, 0x85};
-    if (SafeEqual((void*)kFnPlayerBindSlot, sigBind, sizeof(sigBind)) &&
+    if (HookSite((void*)kFnPlayerBindSlot, sigBind, sizeof(sigBind)) &&
         MH_CreateHook((void*)kFnPlayerBindSlot, (void*)HookBindSlot, (void**)&oBindSlot) == MH_OK &&
         MH_QueueEnableHook((void*)kFnPlayerBindSlot) == MH_OK)
         Log("hook player bind-slot callback at %08x", kFnPlayerBindSlot);

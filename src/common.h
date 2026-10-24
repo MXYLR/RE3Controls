@@ -3,7 +3,7 @@
 
 // Developer build (build.sh dev): dev server, shared-memory bridge with a virtual pad, screenshots. Release builds
 // leave all of it out.
-#define RE3C_VERSION_STR "1.9.4-mod11"
+#define RE3C_VERSION_STR "1.9.4-mod12"
 
 #ifndef RE3C_DEV
 #define RE3C_DEV 0
@@ -138,6 +138,15 @@ inline bool Readable(const void* p, size_t n) {
 }
 inline bool SafeEqual(const void* p, const void* sig, size_t n) {
     return Readable(p, n) && memcmp(p, sig, n) == 0;
+}
+// Hook-site check that tolerates an entry another component already hooked (RE5Fix's dinput8.dll patches code long
+// before this mod runs).  A jump opcode at the entry means someone else owns the prologue; MinHook can still chain a
+// detour on top of it, and skipping the hook silently degraded whole features (bind-slot = the leg layer, pad aim).
+inline bool HookSite(const void* p, const void* sig, size_t n) {
+    if (SafeEqual(p, sig, n)) return true;
+    if (!Readable(p, 1)) return false;
+    const uint8_t b = *(const uint8_t*)p;
+    return b == 0xE9 || b == 0xEB;
 }
 BridgeShared* Bridge();
 void InitBridge();
