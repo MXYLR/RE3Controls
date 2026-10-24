@@ -730,7 +730,11 @@ static void __fastcall HookQfpsUpdate(uint32_t self, void* edx, uint32_t arg) {
         // the orbit in step, so handing the view back is seamless.
         {
             const float len = sqrtf(dx * dx + dz * dz);
-            if (len > 0.001f) {
+            // Only adopt the view pitch when the camera is not looking almost straight up or down: with len near zero
+            // the atan2 saturates and fc.pitch jumped to its clamps (+55 / -40), which then went into everything that
+            // builds a direction from fc.pitch (the knife aim point showed it in the log).  A flat view always has a
+            // horizontal distance of hundreds of units, so this guard only rejects degenerate frames.
+            if (len > 10.0f) {
                 float vp = atan2f(eye[1] - tgt[1], len);
                 if (vp > Rad(55.0f)) vp = Rad(55.0f);
                 if (vp < Rad(-40.0f)) vp = Rad(-40.0f);
