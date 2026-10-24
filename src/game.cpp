@@ -1081,6 +1081,11 @@ static void ApplyControls(uint32_t padObj, uint32_t character) {
             At<float>(character, 0x2700) = px;
             At<float>(character, 0x2704) = py;
             At<float>(character, 0x2708) = pz;
+            // Turn the character to the camera as well.  A knife swing goes along the FACING, not along the aim point,
+            // and pressing the knife key never went through the aim's facing snap - so the swing pointed wherever the
+            // character already faced, which is why it only "sometimes" matched the camera.
+            SetCharacterYaw(character, fc.yaw);
+            KbSyncTargetYaw(character);
             Log("knife: aim point seeded for action %02X (yaw %.1f)", actionId, fc.yaw * 57.3f);
         }
         knifePrev[kSlot] = knifeState ? actionId : 0xFFFFFFFFu;
