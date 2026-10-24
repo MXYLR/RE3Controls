@@ -722,8 +722,17 @@ static void __fastcall HookQfpsUpdate(uint32_t self, void* edx, uint32_t arg) {
             if (fc.pitch > Rad(55.0f)) fc.pitch = Rad(55.0f);
             if (fc.pitch < Rad(-40.0f)) fc.pitch = Rad(-40.0f);
         }
-        // (The temporary aimdbg dump that used to run here every 250 ms has been removed: it was only for finding
-        // the pitch channel, and it filled RE3Controls.log during every aim.)
+        // Pose pitch: while the game owns the aim camera, keep the character's own aim angles on the camera pitch.
+        // Seeding them once at the start of the aim only held for a frame or two; the aim pose is what the player
+        // sees, so they are refreshed here every frame with the pitch the camera just took.  This is what makes the
+        // upper body tilt with the view instead of staying level while the shot already follows the camera ray.
+        if (!own && At<uint8_t>(self, cam::AimRig) == 1 && !c.meleeOnly) {
+            const uint32_t chPose = At<uint32_t>(self, cam::Parent);
+            if (chPose && Readable((void*)chPose, 0x3000)) {
+                At<float>(chPose, 0x2908) = fc.pitch;
+                At<float>(chPose, 0x290C) = fc.pitch;
+            }
+        }
     }
     // Blend for a moment whenever the camera changes hands, from wherever the last frame left it.
     // Mode=MeleeCamera blends the hand-over to and from the game's camera itself. In the full mode the camera
