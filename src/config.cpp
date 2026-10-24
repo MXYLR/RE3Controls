@@ -126,10 +126,7 @@ static const char kDefaultIni[] =
 "          ShoulderLeftKinds=0\r\n"
 "          ; sides the GAME itself uses (bit per kind): default bit 0 = Chris aims with the character left, Sheva right\r\n"
 "          ShoulderGameLeftKinds=\r\n"
-"          ; F zooms in and C zooms out while aiming a plain gun (not the scope)\r\n"
-"          ZoomKeys=1\r\n"
-"          ZoomFovStep=-14\r\n"
-"          ZoomMaxStep=2\r\n"
+
     "\r\n"
     "; Walking speeds while aiming (1.0 = normal walk)\r\n"
     "          WalkSpeed=1.125\r\n"
@@ -202,7 +199,14 @@ static const char kDefaultIni[] =
     "          HookDelayMs=3000\r\n"
     "\r\n"
     "\r\n"
-    "[Keyboard]\r\n"
+    "[Zoom]\r\n"
+"; Plain-gun zoom while aiming (not the scope): F zooms in, C zooms out.\r\n"
+"; ZoomFovStep: field of view degrees per step (negative = closer). ZoomMaxStep: highest step.\r\n"
+"ZoomKeys=1\r\n"
+"ZoomFovStep=-20\r\n"
+"ZoomMaxStep=3\r\n"
+"\r\n"
+"[Keyboard]\r\n"
     "\r\n"
     "; Enable the mod's controls on keyboard + mouse\r\n"
     "          KeyboardMouse=1\r\n"
@@ -378,9 +382,9 @@ void LoadConfig() {
         }
         c.shoulderGameCharLeftMask = mask;  // empty / none = every character is game-right, which is RE5's default
     }
-    c.zoomKeys = GetBool(path, "Aim", "ZoomKeys", c.zoomKeys);
-    c.zoomFovStep = GetFloat(path, "Aim", "ZoomFovStep", c.zoomFovStep);
-    c.zoomMaxStep = (int)GetFloat(path, "Aim", "ZoomMaxStep", (float)c.zoomMaxStep);
+    c.zoomKeys = GetBool(path, "Zoom", "ZoomKeys", c.zoomKeys);
+    c.zoomFovStep = GetFloat(path, "Zoom", "ZoomFovStep", c.zoomFovStep);
+    c.zoomMaxStep = (int)GetFloat(path, "Zoom", "ZoomMaxStep", (float)c.zoomMaxStep);
     {
         char ib[16];
         GetPrivateProfileStringA("Controls", "InteractButton", "A", ib, sizeof(ib), path);
