@@ -36,7 +36,7 @@ struct Config {
     bool scopeWalk = true;          // walk in the sniper / rocket launcher scope (zoom on RB + left stick)
     bool shoulderAuto = true;       // pick the shoulder from the character (Chris left, Sheva right by default)
     bool shoulderSwapAlways = true; // the shoulder key works outside the aim too (knife stays on LB)
-    unsigned shoulderLeftMask = 1u; // bit per character kind (0x715B90) that stands on the LEFT shoulder
+    unsigned shoulderLeftMask = 1u; // bit per character kind (0x715B90) whose CHARACTER is on the LEFT of the screen
     bool zoomKeys = true;           // F zooms in and C zooms out while aiming a plain gun
     float zoomFovStep = -14.0f;     // degrees of fov per zoom step (negative = closer)
     int zoomMaxStep = 2;            // highest zoom step (2 = two presses)

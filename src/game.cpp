@@ -528,15 +528,17 @@ static void ApplyControls(uint32_t padObj, uint32_t character) {
     // Every local player has a free camera of their own (split screen: on their own camera controller, whatever
     // device each one plays with).
     FreeCam& fc = CamFor(character);
-    // Shoulder from the character: a fresh character gets its default side (Chris left, Sheva right); the RB swap
-    // during the aim still overrides it for the rest of that character's life.
+    // Shoulder from the character: a fresh character gets its default side; the swap key still overrides it for the
+    // rest of that character's life.  The mask bit means "the CHARACTER stands on the LEFT of the screen", which is
+    // the RIGHT-shoulder camera (camera.cpp Orbit: eye = pos - fwd*dist + right*side, side = +1 puts the camera to
+    // its right and the character to the left of the frame).  So leftShoulder is the INVERSE of the bit.
     if (fc.character != character) {
         if (c.shoulderAuto) {
             const int kind = CharacterKind(character);
             if (kind >= 0 && kind < 32) {
-                const bool wantLeft = ((c.shoulderLeftMask >> kind) & 1u) != 0;
-                fc.leftShoulder = wantLeft;
-                Log("shoulder: kind %d -> %s", kind, wantLeft ? "left" : "right");
+                const bool charLeft = ((c.shoulderLeftMask >> kind) & 1u) != 0;
+                fc.leftShoulder = !charLeft;
+                Log("shoulder: kind %d -> character on the %s of the screen", kind, charLeft ? "left" : "right");
             }
         }
         g_zoomStep = 0;
