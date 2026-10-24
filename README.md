@@ -101,8 +101,8 @@ Beyond upstream v1.9 and notencio's v1.9.4 fixes, this build adds:
   - the walking camera uses it directly;
   - the game's own aim poses are mirrored only when needed.
   The game aims with a side of its own per character (Chris and Sheva differ), so
-  that side is measured at the start of each aim 闁?three consecutive frames with
-  the same sign, never while mirroring 闁?and remembered. The log prints it once:
+  that side is measured at the start of each aim 闂?three consecutive frames with
+  the same sign, never while mirroring 闂?and remembered. The log prints it once:
   `shoulder: game aims with the character on the left (pose x -40.0)`.
 - The key is read raw, so it is independent of the game's own button bindings,
   and a press is consumed for that frame (a key that is also bound to another
@@ -135,17 +135,20 @@ gamepad players are unaffected.
 
 ## Known issues in this build
 
-- **Sniper scope aim.** The scope is drawn by the weapon camera (`uCameraWep`); the
-  shot point (`ch+0x2700`) and the aim point (`ch+0x2870`) do not reach it.  The
-  character's aim state (ch+0x2908/+0x290C) is the game's pitch integrator: writing
-  it every frame freezes the scope pitch, so `[Zoom] ScopeLook` ships at 0 and the
-  scope keeps its stock behaviour.
-- **Knife aim** is seeded on every change of knife action id and only horizontally
-  (a slash has no useful vertical aim); vertical targets are not tracked.
+- **Sniper scope aiming.** The scope view is drawn by the weapon camera (`uCameraWep`)
+  and uses that camera's own state.  The shot point (`ch+0x2700`), the aim point
+  (`ch+0x2870`) and the pad aim input all fail to reach it, and writing the
+  character's aim state (`ch+0x2908/+0x290C`) every frame freezes its pitch because
+  those fields are the game's pitch integrator.  The scope therefore starts on the
+  game's own direction instead of the free camera's.  `[Zoom] ScopeLook` stays 0.
+- **Knife swing direction.** The aim point and the facing are written while the
+  knife is out (the point every frame, the facing on every action id change), which
+  fixes most swings, but the very first swing after readiness can still go to the
+  character's old front, and the game's own melee assist may pull a swing toward a
+  nearby enemy.
 - Five hooks cannot be installed where RE5Fix patched the entries (camera ctrl,
-  bind-slot, camera aim ray, pad aim, reticle request). The mod works without them,
-  with the leg-layer mask applied at setMotion instead of in the bind callback.
-
+  bind-slot, camera aim ray, pad aim, reticle request).  The mod works without them;
+  the leg-layer mask is applied at setMotion instead of in the bind callback.
 ## Defaults in this build
 
 | Setting | Value |

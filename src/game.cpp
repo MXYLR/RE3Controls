@@ -1075,19 +1075,19 @@ static void ApplyControls(uint32_t padObj, uint32_t character) {
     // Each kind of walking has its own switch: some players like to walk with the knife and reload on the move
     // but shoot standing.
     const bool knifeState = actionId >= aid::KnifeBegin && actionId <= aid::KnifeAttack;
-    // The knife readies through its own states (0x22-0x27) and does not always set the aim rig; the id also changes
-    // while the knife is out (0x22 ready -> 0x23 hold -> 0x27 attack), and each of those recomputes the aim, which is
-    // why the knife "sometimes" aimed along the camera.  Seed the aim point on every change of knife state, not only
-    // on the way in.
+    // The knife readies through its own states (0x22-0x27) and does not always set the aim rig.  Writing the aim point
+    // only when the id changed was one frame too late for the swing that started on that frame: the first swing of a
+    // hold went back to the character's front and the second one used the value written during the first (exactly the
+    // "first swing centres, second swing follows the camera" report).  The point is therefore refreshed EVERY frame
+    // while the knife is out, so it is already current when the swing picks its direction; the facing is turned to the
+    // camera only when the action id changes, so walking is not fought.
     {
         static uint32_t knifePrev[4] = {0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu};
         const int kSlot = At<uint8_t>(character, ch::NetSlot) & 3;
-        if (knifeState && knifePrev[kSlot] != actionId) {
+        if (knifeState) {
             float pos[3];
             CharacterWorldPos(character, pos);
-            // Horizontal only: a knife swing is a melee action, it has no useful vertical aim, and fc.pitch is at one
-            // of its clamps (+55 / -40) whenever the game owns the aim camera - seeding that made the aim point jump
-            // between the sky and the floor, which is why the knife only "sometimes" pointed along the camera.
+            // Horizontal only: a knife swing is a melee action and has no useful vertical aim.
             const float px = pos[0] + sinf(fc.yaw) * 4000.0f;
             const float py = pos[1] + 90.0f;
             const float pz = pos[2] + cosf(fc.yaw) * 4000.0f;
@@ -1097,12 +1097,11 @@ static void ApplyControls(uint32_t padObj, uint32_t character) {
             At<float>(character, 0x2700) = px;
             At<float>(character, 0x2704) = py;
             At<float>(character, 0x2708) = pz;
-            // Turn the character to the camera as well.  A knife swing goes along the FACING, not along the aim point,
-            // and pressing the knife key never went through the aim's facing snap - so the swing pointed wherever the
-            // character already faced, which is why it only "sometimes" matched the camera.
-            SetCharacterYaw(character, fc.yaw);
-            KbSyncTargetYaw(character);
-            Log("knife: aim point seeded for action %02X (yaw %.1f)", actionId, fc.yaw * 57.3f);
+            if (knifePrev[kSlot] != actionId) {
+                SetCharacterYaw(character, fc.yaw);
+                KbSyncTargetYaw(character);
+                Log("knife: aim point and facing set for action %02X (yaw %.1f)", actionId, fc.yaw * 57.3f);
+            }
         }
         knifePrev[kSlot] = knifeState ? actionId : 0xFFFFFFFFu;
     }
