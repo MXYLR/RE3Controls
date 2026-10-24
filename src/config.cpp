@@ -205,6 +205,8 @@ static const char kDefaultIni[] =
 "ZoomKeys=1\r\n"
 "ZoomFovStep=-20\r\n"
 "ZoomMaxStep=3\r\n"
+"; 1 = while scoped the mod drives the aim pitch from the mouse, so the scope follows the camera.\r\n"
+"ScopeLook=1\r\n"
 "\r\n"
 "[Keyboard]\r\n"
     "\r\n"
@@ -385,6 +387,7 @@ void LoadConfig() {
     c.zoomKeys = GetBool(path, "Zoom", "ZoomKeys", c.zoomKeys);
     c.zoomFovStep = GetFloat(path, "Zoom", "ZoomFovStep", c.zoomFovStep);
     c.zoomMaxStep = (int)GetFloat(path, "Zoom", "ZoomMaxStep", (float)c.zoomMaxStep);
+    c.scopeLook = GetBool(path, "Zoom", "ScopeLook", c.scopeLook);
     {
         char ib[16];
         GetPrivateProfileStringA("Controls", "InteractButton", "A", ib, sizeof(ib), path);

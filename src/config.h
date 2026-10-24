@@ -42,6 +42,7 @@ struct Config {
     bool zoomKeys = true;           // F zooms in and C zooms out while aiming a plain gun
     float zoomFovStep = -20.0f;     // degrees of fov per zoom step (negative = closer)
     int zoomMaxStep = 3;            // highest zoom step (3 = three presses, about -60 degrees)
+    bool scopeLook = true;          // drive the scope pitch from the mouse and the free camera
     bool knifeWalk = true;          // walk with the knife readied
     bool reloadWalk = true;         // reload on the move (otherwise standing, camera stays free)
     bool switchWalk = true;         // keep walking while switching weapons

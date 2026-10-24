@@ -1008,6 +1008,23 @@ static void ApplyControls(uint32_t padObj, uint32_t character) {
         // old `&& orbit` guard skipped exactly the case that needed it: on an aim press the orbit is already off
         // (the game's aim/scope camera owns the view), so the sniper scope kept aiming at the pre-snap target yaw.
         if (snapNow) KbSyncTargetYaw(character);
+        // Scope look.  The sniper scope is drawn by the weapon camera (uCameraWep), which never goes through the mod's
+        // camera hook, so nothing the mod writes to the shot point or the aim point reaches it.  Its pitch comes from
+        // the character's aim state, so the mod integrates the mouse vertical itself and writes that state every frame
+        // while scoped: the scope then follows the view and still answers the mouse.  The horizontal mouse is left to
+        // the game (it turns the body), and only the vertical delta is consumed here so it is not applied twice.
+        if (At<uint8_t>(character, ch::Scope) != 0 && aimHeld && kbm && c.scopeLook) {
+            if (!JustActivated()) {
+                const float k = MouseUnitRadians() * c.mouseSensitivity;
+                const uint32_t inv = MouseInvert();
+                fc.pitch += kb.mouseY * k * c.mouseVertical * ((inv & 1) ? -1.0f : 1.0f);
+                if (fc.pitch > Rad(55.0f)) fc.pitch = Rad(55.0f);
+                if (fc.pitch < Rad(-40.0f)) fc.pitch = Rad(-40.0f);
+            }
+            At<float>(padObj, 0x210) = 0.0f;
+            At<float>(character, 0x2908) = fc.pitch;
+            At<float>(character, 0x290C) = fc.pitch;
+        }
     }
     S.wasAiming = aimHeld;
 
