@@ -8,7 +8,9 @@ struct FreeCam {
     uint32_t character = 0;  // local player the camera belongs to
     float yaw = 0;           // world yaw the camera looks along (radians, same convention as the character)
     float pitch = 0;         // radians, + = looking down (camera above the shoulder), - = looking up
-    bool leftShoulder = false;  // camera over the left shoulder
+    bool leftShoulder = false;  // camera over the left shoulder (orbit only)
+    bool mirrorAim = false;     // mirror the game's aim/look-at poses: only when the wanted side differs from the game's own
+    bool charLeft = true;       // wanted side expressed as "the character stands on the left of the screen"
     bool active = false;     // the orbit camera runs this frame (not aiming, free camera on)
     bool initialised = false;
     bool noAimRig = false;   // reloading on the move: keep the normal camera while the gun is up

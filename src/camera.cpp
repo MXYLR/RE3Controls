@@ -494,7 +494,9 @@ static void __fastcall HookQfpsUpdate(uint32_t self, void* edx, uint32_t arg) {
         At<float>(self, cam::LookH) = 0.0f;
     }
     PoseMirror mirror;
-    if (fc.leftShoulder) mirror.Apply(self);
+    // The game aims with a side of its own per character (Sheva with the character on the right, Chris on the left),
+    // so the mirror is the INVERSE case only: mirrorAim is set when the wanted side differs from that default.
+    if (fc.mirrorAim) mirror.Apply(self);
     // Aim pitch hand-off, measured from the aimdbg samples: the game's vertical look channel (cam::LookV) tracks
     // the view pitch as  lookV = -pitch / 55 deg  (camPitch -16.3 deg -> lookV +0.319, -27.6 -> +0.509).  Carrying
     // the orbit pitch here, before the game's own camera update, makes the aim start where the player was looking;

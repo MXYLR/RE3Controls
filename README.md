@@ -123,3 +123,7 @@ gamepad players are unaffected.
 - The quick knife slash can be turned with the mouse / right stick.
 - Aim pitch is inherited from the free camera, and the view no longer snaps back
   to the pre-aim pitch after aiming.
+Note: `[Camera] ShoulderGameLeftKinds` (bit per character kind, default `0` = only
+Chris) tells the mod which side the GAME itself aims with. The aim camera is only
+mirrored when the wanted side differs from that default, so the view no longer
+changes side between walking and aiming (Sheva aims on the right in both).
