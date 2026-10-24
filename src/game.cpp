@@ -985,11 +985,11 @@ static void ApplyControls(uint32_t padObj, uint32_t character) {
         }
         // With the free camera the game's own mouse turning of the body is off (it steers Wesker's dash); outside the
         // aim the mouse belongs to the camera, in the aim the game's mouse aim gets it (scaled by MouseSensitivity).
-        // NOT in the scope: the scope is drawn by the weapon camera (uCameraWep), which the mod's orbit never
-        // touches, so zeroing the game's mouse turn here leaves the scope with no way to pitch at all.  `orbit` is
-        // "freeCam && fc.initialised" and stays true while aiming, which is why scoping was affected on every build.
+        // NOT in the scope (weapon camera) and NOT while aiming: `orbit` stays true while aiming, so this zeroed the
+        // mouse input during the aim as well and the aim camera could only move by the pad stick - the trace showed
+        // camPitch moving within +/-5 degrees while aiming, against +/-40 outside it.
         const bool scopedNow = At<uint8_t>(character, ch::Scope) != 0;
-        if (orbit && !dash && !scopedNow) {
+        if (orbit && !dash && !scopedNow && !aimHeld) {
             At<float>(padObj, 0x200) = 0.0f;
             At<float>(padObj, 0x204) = 0.0f;
         }
