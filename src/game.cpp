@@ -274,7 +274,7 @@ static void MeleeOnlyControls(ControlsState& S, uint32_t padObj, uint32_t charac
     fc.active = melee;
     fc.activeTime = Now();
     fc.noAimRig = false;
-    fc.leftShoulder = false;  // the shoulder swap belongs to the full mode
+    fc.charLeft = false; fc.leftShoulder = false; fc.mirrorAim = false;  // the shoulder swap belongs to the full mode
     if (kb) {
         // Keyboard/mouse: the mouse turns the camera during the attack (the game's own mouse turning is off then).
         if (melee && fc.initialised && !JustActivated()) {
@@ -528,10 +528,16 @@ static void ApplyControls(uint32_t padObj, uint32_t character) {
     // Every local player has a free camera of their own (split screen: on their own camera controller, whatever
     // device each one plays with).
     FreeCam& fc = CamFor(character);
-    // Upstream semantics, nothing on top: fc.leftShoulder is the side, one flag for the orbit and the aim mirror.
-    // The per-character defaults (ShoulderAuto / ShoulderLeftKinds / ShoulderGameLeftKinds) and the runtime
-    // measurement are disabled; the keys still read as documented in the README.
+    // The side is kept as the wanted one (fc.charLeft = the character stands on the left of the screen) and the two
+    // mechanisms derive from it:
+    //   orbit:       leftShoulder = !charLeft   (camera on the right puts the character on the left)
+    //   game's aim:  mirrorAim    = charLeft    (the game aims with the character on the right, so wanting it on the
+    //                                            left means mirroring, and wanting it on the right means not)
+    // With one flag for both, walking and aiming were always on opposite sides.
     if (fc.character != character) {
+        fc.charLeft = true;
+        fc.leftShoulder = false;
+        fc.mirrorAim = true;
         g_zoomStep = 0;
         g_zoomFov = 0.0f;
     }
@@ -567,8 +573,8 @@ static void ApplyControls(uint32_t padObj, uint32_t character) {
         const bool down = vk > 0 && (GetAsyncKeyState(vk) & 0x8000) != 0;
         static bool keyPrev = false;
         if (down && !keyPrev) {
-            fc.leftShoulder = !fc.leftShoulder;
-            Log("shoulder: key '%c' -> %s shoulder", vk, fc.leftShoulder ? "left" : "right");
+            fc.charLeft = !fc.charLeft; fc.leftShoulder = !fc.charLeft; fc.mirrorAim = fc.charLeft;
+            Log("shoulder: key '%c' -> %s shoulder", vk, fc.charLeft ? "character left" : "character right");
         }
         keyPrev = down;
     }
@@ -613,7 +619,7 @@ static void ApplyControls(uint32_t padObj, uint32_t character) {
         fc.noAimRig = false;  // in the inventory fc.active and fc.yaw stay: the camera keeps its place
         if ((keyboard && !kbm) || mounted) {
             fc.active = false;
-            fc.leftShoulder = false;  // the game's own cameras must not stay mirrored
+            fc.charLeft = false; fc.leftShoulder = false; fc.mirrorAim = false;  // the game's own cameras must not stay mirrored
         }
         AimWalkUpdate(character, 0.0f, 0.0f, false, 0.0f, (float)dt);
         NetLocalFrame(character, InLocomotion(character), false);
@@ -644,9 +650,9 @@ static void ApplyControls(uint32_t padObj, uint32_t character) {
         // works whether aiming or not, like a modern TPS: the physical LB keeps the knife outside the aim and the
         // RB-to-knife forwarding is gone.  In a scope the key stays the ScopeWalk zoom button.
         if (c.shoulderSwapAlways) {
-            if ((physTrg & partnerBit) && !At<uint8_t>(character, ch::Scope)) fc.leftShoulder = !fc.leftShoulder;
+            if ((physTrg & partnerBit) && !At<uint8_t>(character, ch::Scope)) { fc.charLeft = !fc.charLeft; fc.leftShoulder = !fc.charLeft; fc.mirrorAim = fc.charLeft; }
         } else if (aimHeld) {
-            if ((physTrg & partnerBit) && !At<uint8_t>(character, ch::Scope)) fc.leftShoulder = !fc.leftShoulder;
+            if ((physTrg & partnerBit) && !At<uint8_t>(character, ch::Scope)) { fc.charLeft = !fc.charLeft; fc.leftShoulder = !fc.charLeft; fc.mirrorAim = fc.charLeft; }
         } else if (phys & partnerBit) {
             out |= P_LB;
         }
@@ -664,9 +670,9 @@ static void ApplyControls(uint32_t padObj, uint32_t character) {
         if (dash && (kbm ? (phys & runBit) : (phys & P_A))) out |= P_A;
     } else {
         out = on;
-        fc.leftShoulder = false;  // no swap button in the original layout
+        fc.charLeft = false; fc.leftShoulder = false; fc.mirrorAim = false;  // no swap button in the original layout
     }
-    if (covered) fc.leftShoulder = false;  // the game's own cover camera must not be mirrored
+    if (covered) { fc.charLeft = false; fc.leftShoulder = false; fc.mirrorAim = false; }  // the game's own cover camera must not be mirrored
     S.character = character;
     S.gunAim = c.remapButtons ? (aiming && !knifeWins) : (on & P_RT) != 0;
 
