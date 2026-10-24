@@ -561,14 +561,17 @@ static void ApplyControls(uint32_t padObj, uint32_t character) {
         g_zoomFov = 0.0f;
     }
     // Keyboard shoulder key (Controls/ShoulderKey, default B): raw key, aiming or not, independent of the game's own
-    // bindings.  It flips the same single flag the pad uses (fc.leftShoulder), so walking and aiming always flip
-    // together, exactly as upstream's RB swap does.
+    // bindings.  `keyToggled` records that this frame's press was consumed here: the key can also be the game's own
+    // "locate partner" button, which the pad path below maps to partnerBit and would flip the same value a second time
+    // in the same frame (two flips = no visible change; three presses in the log all reported the same side).
+    bool keyToggled = false;
     if (c.shoulderSwapAlways && c.shoulderKey[0] && !At<uint8_t>(character, ch::Scope)) {
         const int vk = toupper((unsigned char)c.shoulderKey[0]);
         const bool down = vk > 0 && (GetAsyncKeyState(vk) & 0x8000) != 0;
         static bool keyPrev = false;
         if (down && !keyPrev) {
             g_charLeftSide = !g_charLeftSide;
+            keyToggled = true;
             Log("shoulder: key '%c' -> character %s (leftShoulder %d, mirrorAim %d)", vk,
                 g_charLeftSide ? "left" : "right", (int)!g_charLeftSide, (int)g_charLeftSide);
         }
@@ -652,9 +655,9 @@ static void ApplyControls(uint32_t padObj, uint32_t character) {
         // works whether aiming or not, like a modern TPS: the physical LB keeps the knife outside the aim and the
         // RB-to-knife forwarding is gone.  In a scope the key stays the ScopeWalk zoom button.
         if (c.shoulderSwapAlways) {
-            if ((physTrg & partnerBit) && !At<uint8_t>(character, ch::Scope)) { g_charLeftSide = !g_charLeftSide; }
+            if (!keyToggled && (physTrg & partnerBit) && !At<uint8_t>(character, ch::Scope)) { g_charLeftSide = !g_charLeftSide; }
         } else if (aimHeld) {
-            if ((physTrg & partnerBit) && !At<uint8_t>(character, ch::Scope)) { g_charLeftSide = !g_charLeftSide; }
+            if (!keyToggled && (physTrg & partnerBit) && !At<uint8_t>(character, ch::Scope)) { g_charLeftSide = !g_charLeftSide; }
         } else if (phys & partnerBit) {
             out |= P_LB;
         }
