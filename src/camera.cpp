@@ -403,6 +403,14 @@ static void AimTracking(uint32_t q, int idx) {
     }
 }
 
+// Camera ray while aiming, shared with crosshair.cpp through AimCameraRay().
+static float g_aimEye[3] = {0, 0, 0}, g_aimDir[3] = {0, 0, 1};
+static bool g_aimRayValid = false;
+bool AimCameraRay(float eye[3], float dir[3]) {
+    if (!g_aimRayValid) return false;
+    for (int i = 0; i < 3; ++i) { eye[i] = g_aimEye[i]; dir[i] = g_aimDir[i]; }
+    return true;
+}
 static bool g_lastAimRig[4] = {};
 static int g_aimSeedFrames[4] = {};
 // One compact line per aim (start, ~0.35 s in, end) with every field the aim could follow, so a single aim with the
@@ -613,6 +621,21 @@ static void __fastcall HookQfpsUpdate(uint32_t self, void* edx, uint32_t arg) {
     float* eye = (float*)(self + cam::EyeAim);
     float* up = (float*)(self + cam::UpAim);
     float* tgt = (float*)(self + cam::TargetAim);
+    // Cache the camera ray for the crosshair code: with the free camera the barrel no longer points where the player
+    // looks, and the game fires along the barrel, so the shot is put on this ray instead (HookLaserRaycast).
+    if (At<uint8_t>(self, cam::AimRig) == 1) {
+        float d[3] = {tgt[0] - eye[0], tgt[1] - eye[1], tgt[2] - eye[2]};
+        const float len = sqrtf(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
+        if (len > 1.0f) {
+            for (int i = 0; i < 3; ++i) {
+                g_aimEye[i] = eye[i];
+                g_aimDir[i] = d[i] / len;
+            }
+            g_aimRayValid = true;
+        }
+    } else {
+        g_aimRayValid = false;
+    }
     const float dx = tgt[0] - eye[0], dz = tgt[2] - eye[2];
     if (dx * dx + dz * dz < 1.0f) return;
     const float baseYaw = atan2f(dx, dz);

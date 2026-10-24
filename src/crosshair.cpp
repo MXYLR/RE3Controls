@@ -16,6 +16,7 @@
 #include "re5.h"
 #include "config.h"
 #include "crosshair.h"
+#include "camera.h"
 #include "kbinput.h"
 #include "damage.h"
 #include "net.h"
@@ -302,6 +303,19 @@ int __fastcall HookLaserRaycast(uint32_t ch, void* edx) {
         if (len > 1.0f)
             for (int i = 0; i < 3; ++i) shot[i] = m[i] + d[i] / len * 5000.0f;
         return r;
+    }
+    // Aim follows the camera.  For a pad (and for the keyboard's own aim) the game fires along the BARREL, and with
+    // the free camera the barrel no longer points where the player looks: that is the "it aims in front of the
+    // character" behaviour.  While aiming a plain gun, the shot point is put on the camera ray instead - the same ray
+    // the mod's centred crosshair uses - so the shot goes where the camera looks.
+    if (Rd(ch + ch::NetControl) == 0 && At<uint8_t>(ch, ChScope) == 0 && GunUp(ch) && PlainGun(ch)) {
+        float rayEye[3], rayDir[3];
+        if (AimCameraRay(rayEye, rayDir)) {
+            const int r = oLaserRaycast(ch, edx);
+            float* shot = (float*)(ch + ChShot);
+            for (int i = 0; i < 3; ++i) shot[i] = rayEye[i] + rayDir[i] * 5000.0f;
+            return r;
+        }
     }
     if (!CrosshairOn(ch)) return oLaserRaycast(ch, edx);
     float shot[3];

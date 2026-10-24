@@ -29,6 +29,9 @@ void InitCameraHooks();
 float DefaultCameraPitch();  // radians, from the ini
 // Extra fov (degrees, negative = closer) from the plain-gun zoom keys, 0 when off.
 float ZoomFovExtra();
+// Camera ray while aiming (eye + unit direction), used by the crosshair code so the shot follows the camera instead of
+// the barrel line.  False when the game does not own the aim camera this frame.
+bool AimCameraRay(float eye[3], float dir[3]);
 
 // yaw helpers: forward = (sin yaw, 0, cos yaw), right = (-cos yaw, 0, sin yaw)
 // World facing of a character (on a moving boat or platform: its own yaw plus the platform's heading).
