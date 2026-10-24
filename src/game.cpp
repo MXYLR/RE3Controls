@@ -1042,13 +1042,14 @@ static void ApplyControls(uint32_t padObj, uint32_t character) {
     // Each kind of walking has its own switch: some players like to walk with the knife and reload on the move
     // but shoot standing.
     const bool knifeState = actionId >= aid::KnifeBegin && actionId <= aid::KnifeAttack;
-    // The knife readies through its own states (0x22-0x27) and does not always set the aim rig, so the aim point that
-    // the camera-side seed writes on aim entry was only applied some of the time - that is why the knife "sometimes"
-    // aimed along the camera.  Seed it here as well, once per entry into a knife state.
+    // The knife readies through its own states (0x22-0x27) and does not always set the aim rig; the id also changes
+    // while the knife is out (0x22 ready -> 0x23 hold -> 0x27 attack), and each of those recomputes the aim, which is
+    // why the knife "sometimes" aimed along the camera.  Seed the aim point on every change of knife state, not only
+    // on the way in.
     {
-        static int knifePrev[4] = {};
+        static uint32_t knifePrev[4] = {0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu};
         const int kSlot = At<uint8_t>(character, ch::NetSlot) & 3;
-        if (knifeState && !knifePrev[kSlot]) {
+        if (knifeState && knifePrev[kSlot] != actionId) {
             float pos[3];
             CharacterWorldPos(character, pos);
             const float cy3 = cosf(fc.pitch), sy3 = sinf(fc.pitch);
@@ -1061,9 +1062,10 @@ static void ApplyControls(uint32_t padObj, uint32_t character) {
             At<float>(character, 0x2700) = px;
             At<float>(character, 0x2704) = py;
             At<float>(character, 0x2708) = pz;
-            Log("knife: aim point seeded from the camera (yaw %.1f, pitch %.1f)", fc.yaw * 57.3f, fc.pitch * 57.3f);
+            Log("knife: aim point seeded for action %02X (yaw %.1f, pitch %.1f)", actionId, fc.yaw * 57.3f,
+                fc.pitch * 57.3f);
         }
-        knifePrev[kSlot] = knifeState ? 1 : 0;
+        knifePrev[kSlot] = knifeState ? actionId : 0xFFFFFFFFu;
     }
     // In a scope the left stick zooms (control types B and D): no walking there, unless ScopeWalk, where RB held
     // gives the stick back to the zoom (the legs stop meanwhile) and the keyboard zooms with the wheel as usual. In A
