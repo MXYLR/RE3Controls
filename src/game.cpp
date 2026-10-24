@@ -1042,6 +1042,29 @@ static void ApplyControls(uint32_t padObj, uint32_t character) {
     // Each kind of walking has its own switch: some players like to walk with the knife and reload on the move
     // but shoot standing.
     const bool knifeState = actionId >= aid::KnifeBegin && actionId <= aid::KnifeAttack;
+    // The knife readies through its own states (0x22-0x27) and does not always set the aim rig, so the aim point that
+    // the camera-side seed writes on aim entry was only applied some of the time - that is why the knife "sometimes"
+    // aimed along the camera.  Seed it here as well, once per entry into a knife state.
+    {
+        static int knifePrev[4] = {};
+        const int kSlot = At<uint8_t>(character, ch::NetSlot) & 3;
+        if (knifeState && !knifePrev[kSlot]) {
+            float pos[3];
+            CharacterWorldPos(character, pos);
+            const float cy3 = cosf(fc.pitch), sy3 = sinf(fc.pitch);
+            const float px = pos[0] + sinf(fc.yaw) * cy3 * 4000.0f;
+            const float py = pos[1] + 90.0f - sy3 * 4000.0f;
+            const float pz = pos[2] + cosf(fc.yaw) * cy3 * 4000.0f;
+            At<float>(character, 0x2870) = px;
+            At<float>(character, 0x2874) = py;
+            At<float>(character, 0x2878) = pz;
+            At<float>(character, 0x2700) = px;
+            At<float>(character, 0x2704) = py;
+            At<float>(character, 0x2708) = pz;
+            Log("knife: aim point seeded from the camera (yaw %.1f, pitch %.1f)", fc.yaw * 57.3f, fc.pitch * 57.3f);
+        }
+        knifePrev[kSlot] = knifeState ? 1 : 0;
+    }
     // In a scope the left stick zooms (control types B and D): no walking there, unless ScopeWalk, where RB held
     // gives the stick back to the zoom (the legs stop meanwhile) and the keyboard zooms with the wheel as usual. In A
     // and C the left stick aims in the scope.
