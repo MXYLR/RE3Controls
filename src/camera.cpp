@@ -571,6 +571,14 @@ static void __fastcall HookQfpsUpdate(uint32_t self, void* edx, uint32_t arg) {
             if (v < -1.8f) v = -1.8f;
             At<float>(self, cam::LookV) = v;
             g_aimSeedFrames[idx] = 3;
+            // lookV alone does not hold: the game recomputes it every frame and the entry pitch was gone within
+            // 0.35 s (trace: camPitch -14.9 at "in", +5.5 at "mid").  The character's aim angles do hold, so they
+            // are seeded once as well, here, before the game's camera update uses them.
+            const uint32_t chA = At<uint32_t>(self, cam::Parent);
+            if (chA && Readable((void*)chA, 0x3000)) {
+                At<float>(chA, 0x2908) = fc.pitch;
+                At<float>(chA, 0x290C) = fc.pitch;
+            }
             AimTrace(self, idx, "in");
         }
         // One more sample a moment later and one when the aim ends: together they show which field the game's aim
