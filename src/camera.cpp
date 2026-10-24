@@ -586,6 +586,20 @@ static void __fastcall HookQfpsUpdate(uint32_t self, void* edx, uint32_t arg) {
             if (chA && Readable((void*)chA, 0x3000)) {
                 At<float>(chA, 0x2908) = fc.pitch;
                 At<float>(chA, 0x290C) = fc.pitch;
+                // The aim POINT, not only the angles: the game derives the aim direction (and the scope's, and the
+                // knife's, neither of which goes through the bullet convergence the plain gun now uses) from
+                // ch+0x2870, a world point along the aim ray.  Put it on the free camera's ray at the moment the aim
+                // starts, from the character's chest, so every aiming mode begins where the player was looking.
+                float pos[3];
+                CharacterWorldPos(chA, pos);
+                const float cy2 = cosf(fc.pitch), sy2 = sinf(fc.pitch);
+                const float dx2 = sinf(fc.yaw) * cy2, dy2 = -sy2, dz2 = cosf(fc.yaw) * cy2;
+                At<float>(chA, 0x2870) = pos[0] + dx2 * 4000.0f;
+                At<float>(chA, 0x2874) = pos[1] + 90.0f + dy2 * 4000.0f;
+                At<float>(chA, 0x2878) = pos[2] + dz2 * 4000.0f;
+                At<float>(chA, 0x2700) = At<float>(chA, 0x2870);
+                At<float>(chA, 0x2704) = At<float>(chA, 0x2874);
+                At<float>(chA, 0x2708) = At<float>(chA, 0x2878);
             }
             AimTrace(self, idx, "in");
         }
