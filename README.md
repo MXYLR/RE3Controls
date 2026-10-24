@@ -76,3 +76,50 @@ that code is in the published DLL.
 RE3Controls is released under the [MIT License](LICENSE): you may use, change and share this code, also in your own
 mods, as long as the copyright notice stays with it. `third_party/minhook/` keeps its own BSD 2-clause licence
 (`third_party/minhook/LICENSE.txt`).
+
+---
+
+## Additions in this fork (MXYLR)
+
+Beyond upstream v1.9 and notencio's v1.9.4 fixes, this build adds:
+
+### Shoulder camera
+
+| Input | Key |
+|---|---|
+| Keyboard | **B** (`[Controls] ShoulderKey=B`, any letter A-Z) |
+| Gamepad | **RB** (**L3** when `RunButton=RB`) |
+
+- The swap works **at any time**, aiming or not (`[Camera] ShoulderSwapAlways=1`).
+  Set it to `0` for the old behaviour (swap only while aiming, RB acts as the
+  knife outside the aim).
+- Outside the aim the knife stays on the physical **LB**, so giving RB to the
+  shoulder does not remove the knife.
+- In a scope the key is the `ScopeWalk` zoom button instead.
+- Per-character default side (`[Camera] ShoulderAuto=1`, `ShoulderLeftKinds`):
+  the default puts the character on the **left of the screen** for kind 0
+  (Chris) and on the right for kind 1 (Sheva). A mask bit means "the character
+  stands on the left of the screen". The log prints the kind once
+  (`shoulder: kind N -> ...`), so the table can be corrected from one run.
+
+### Plain-gun zoom
+
+While aiming a gun (not a scope) the keyboard zooms:
+
+| Key | Action |
+|---|---|
+| **F** | zoom in (one step) |
+| **C** | zoom out |
+
+`[Aim] ZoomKeys=1`, `ZoomFovStep=-14` (fov degrees per step), `ZoomMaxStep=2`.
+The level resets when the aim ends, the sniper scope keeps its own zoom, and
+gamepad players are unaffected.
+
+### Earlier fixes kept in this fork
+
+- The sniper scope no longer has its mouse input zeroed by the mod (it is drawn
+  by the weapon camera, which the mod does not control).
+- Scoped walking is on by default (`ScopeWalk=1`).
+- The quick knife slash can be turned with the mouse / right stick.
+- Aim pitch is inherited from the free camera, and the view no longer snaps back
+  to the pre-aim pitch after aiming.

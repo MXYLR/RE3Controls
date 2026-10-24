@@ -568,6 +568,19 @@ static void ApplyControls(uint32_t padObj, uint32_t character) {
         g_zoomStep = 0;
         g_zoomFov = 0.0f;
     }
+    // Keyboard shoulder key (Controls/ShoulderKey, default B): raw key, so it works whether aiming or not and does not
+    // depend on the game's own bindings.  The pad keeps RB (L3 with RunButton=RB) through partnerBit below.
+    if (c.shoulderSwapAlways && kbm && c.shoulderKey[0] && !At<uint8_t>(character, ch::Scope)) {
+        const int vk = toupper((unsigned char)c.shoulderKey[0]);
+        const bool down = vk > 0 && (GetAsyncKeyState(vk) & 0x8000) != 0;
+        static bool keyPrev = false;
+        if (down && !keyPrev) {
+            fc.leftShoulder = !fc.leftShoulder;
+            static int logged = 0;
+            if (++logged <= 3) Log("shoulder: key '%c' -> %s shoulder", vk, fc.leftShoulder ? "left" : "right");
+        }
+        keyPrev = down;
+    }
     // ch+0x2D8C: 0x4000 riding something, with 0x80 a gun emplacement, 0x40 the jeep gun, 0x20 the airboat driver
     // (the airboat passenger has only 0x4000 and keeps the mod's controls).
     const uint32_t ride = At<uint32_t>(character, 0x2D8C);
