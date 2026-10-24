@@ -494,26 +494,24 @@ static void __fastcall HookQfpsUpdate(uint32_t self, void* edx, uint32_t arg) {
         At<float>(self, cam::LookH) = 0.0f;
     }
     PoseMirror mirror;
-    // Measure the game's own aim side instead of assuming it.  The pose block is in character space with +X to the
-    // character's LEFT (see the PoseMirror comment), so eye.x < 0 means the camera sits on the character's right and
-    // the character stands on the left of the frame.  Read before mirroring, while the game's aim rig runs.
+    // Aim side: measured ONCE per aim, on the first frame of the aim, while nothing is mirrored (mirrorAim is cleared
+    // whenever the aim is off).  Measuring every frame fed our own mirror back into the game's rig pose: the pose x
+    // alternated between +40 and -40, the measurement flipped with it and the mirror oscillated (the log showed
+    // "+40, -40, +40" within one fight).  The game's pose block is in character space with +X to the character's
+    // LEFT, so eye.x < 0 means the camera sits on the character's right and the character stands on the left.
     if (At<uint8_t>(self, cam::AimRig) == 1) {
-        const uint32_t pp = At<uint32_t>(self, kPosePtrs + 3 * 4);  // first of the three aim poses
-        const float* pose = Readable((void*)pp, 0x28) ? (const float*)pp : (const float*)(self + kInlinePoses[3]);
-        if (pose) {
-            const bool gameCharLeft = pose[0] < 0.0f;
-            if (gameCharLeft != fc.gameCharLeft) {
-                fc.gameCharLeft = gameCharLeft;
-                Log("shoulder: game aims with the character on the %s (pose x %+.1f)", gameCharLeft ? "left" : "right",
-                    pose[0]);
-            }
-            const bool wantMirror = (fc.charLeft != fc.gameCharLeft);
-            if (wantMirror != fc.mirrorAim) {
-                fc.mirrorAim = wantMirror;
-                Log("shoulder: mirror %d (wanted %s, game %s)", (int)fc.mirrorAim, fc.charLeft ? "left" : "right",
-                    fc.gameCharLeft ? "left" : "right");
-            }
+        if (!fc.aimSideKnown) {
+            const uint32_t pp = At<uint32_t>(self, kPosePtrs + 3 * 4);  // first of the three aim poses
+            const float* pose = Readable((void*)pp, 0x28) ? (const float*)pp : (const float*)(self + kInlinePoses[3]);
+            fc.gameCharLeft = pose[0] < 0.0f;
+            fc.aimSideKnown = true;
+            Log("shoulder: game aims with the character on the %s (pose x %+.1f, latched)", fc.gameCharLeft ? "left" : "right",
+                pose[0]);
         }
+        fc.mirrorAim = (fc.charLeft != fc.gameCharLeft);
+    } else {
+        fc.aimSideKnown = false;
+        fc.mirrorAim = false;  // nothing mirrored outside the aim, so the next measurement reads the game's own pose
     }
     if (fc.mirrorAim) mirror.Apply(self);
     // Aim pitch hand-off, measured from the aimdbg samples: the game's vertical look channel (cam::LookV) tracks

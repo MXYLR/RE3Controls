@@ -11,7 +11,8 @@ struct FreeCam {
     bool leftShoulder = false;  // camera over the left shoulder (orbit only)
     bool mirrorAim = false;     // mirror the game's aim/look-at poses: only when the wanted side differs from the game's own
     bool charLeft = true;       // wanted side expressed as "the character stands on the left of the screen"
-    bool gameCharLeft = true;   // measured: the game's own aim side puts the character on the left (see camera.cpp)
+    bool gameCharLeft = true;   // measured once per aim: the game's own aim side puts the character on the left
+    bool aimSideKnown = false;  // the measurement above was taken for this aim session
     bool active = false;     // the orbit camera runs this frame (not aiming, free camera on)
     bool initialised = false;
     bool noAimRig = false;   // reloading on the move: keep the normal camera while the gun is up
