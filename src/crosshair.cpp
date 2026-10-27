@@ -308,20 +308,24 @@ int __fastcall HookLaserRaycast(uint32_t ch, void* edx) {
     // the free camera the barrel no longer points where the player looks: that is the "it aims in front of the
     // character" behaviour.  While aiming a plain gun, the shot point is put on the camera ray instead - the same ray
     // the mod's centred crosshair uses - so the shot goes where the camera looks.
+    // NOTE: this must NOT return early - returning here skipped the code below that shortens the laser beam, which is
+    // why a pad player aiming at an enemy saw the laser AND the crosshair at the same time.
+    bool camRay = false;
+    float camPoint[3] = {};
     if (Rd(ch + ch::NetControl) == 0 && At<uint8_t>(ch, ChScope) == 0 && GunUp(ch) && PlainGun(ch)) {
         float rayEye[3], rayDir[3];
         if (AimCameraRay(rayEye, rayDir)) {
-            const int r = oLaserRaycast(ch, edx);
-            float* shot = (float*)(ch + ChShot);
-            for (int i = 0; i < 3; ++i) shot[i] = rayEye[i] + rayDir[i] * 5000.0f;
-            return r;
+            camRay = true;
+            for (int i = 0; i < 3; ++i) camPoint[i] = rayEye[i] + rayDir[i] * 5000.0f;
         }
     }
-    if (!CrosshairOn(ch)) return oLaserRaycast(ch, edx);
+    const bool showCross = CrosshairOn(ch);
+    if (!camRay && !showCross) return oLaserRaycast(ch, edx);
     float shot[3];
     memcpy(shot, (void*)(ch + ChShot), 12);
     oLaserRaycast(ch, edx);
-    memcpy((void*)(ch + ChShot), shot, 12);
+    memcpy((void*)(ch + ChShot), camRay ? camPoint : shot, 12);
+    if (!showCross) return 0;  // the laser sight keeps its beam
     const float* start = (const float*)(ch + ChLaserStart);
     float* end = (float*)(ch + ChLaserEnd);
     if (BarrelWeaponInHand(ch)) {

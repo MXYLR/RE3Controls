@@ -726,6 +726,25 @@ static void __fastcall HookQfpsUpdate(uint32_t self, void* edx, uint32_t arg) {
         Orbit(fc, o, dt, eye, tgt);
     } else {
         fc.yaw = baseYaw;  // aiming, looking at the partner or scripted: the game's camera, followed by the orbit
+        // Shoulder in cover.  Low cover and wall cover use the game's own camera (the orbit is off there), so the
+        // wanted side has no orbit shoulder to move and the swap key looked dead.  The game's camera is shifted
+        // sideways here instead: eye and target move together along the camera's right axis, which is exactly what a
+        // shoulder swap looks like, without taking the cover camera away from the game.
+        {
+            const uint32_t chC = At<uint32_t>(self, cam::Parent);
+            if (chC && Readable((void*)chC, 0x3000) && (At<uint32_t>(chC, 0x2D8C) & 0xF00) != 0) {
+                const float ox = tgt[0] - eye[0], oz = tgt[2] - eye[2];
+                const float l = sqrtf(ox * ox + oz * oz);
+                if (l > 1.0f) {
+                    const float s = fc.charLeft ? 22.0f : -22.0f;
+                    const float rx = oz / l, rz = -ox / l;
+                    eye[0] += rx * s;
+                    eye[2] += rz * s;
+                    tgt[0] += rx * s;
+                    tgt[2] += rz * s;
+                }
+            }
+        }
         // Follow the pitch too, not only the yaw.  While aiming the game owns the view and the mouse pitches it, but
         // fc.pitch stayed frozen at the pre-aim value: when the aim ended the orbit put that old pitch back -- the
         // "the camera returns to the angle it had before aiming" report.  Adopting the view pitch every frame keeps

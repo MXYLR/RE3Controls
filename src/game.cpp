@@ -577,6 +577,7 @@ static void ApplyControls(uint32_t padObj, uint32_t character) {
         }
         keyPrev = down;
     }
+
     // Derive the two mechanisms from the wanted side, every frame.  The contexts below (mounted guns, the original
     // button layout, cover) clear them again for their own frames, which is what we want: they hand the camera back
     // to the game.  Outside them the player's choice always wins.
@@ -677,7 +678,19 @@ static void ApplyControls(uint32_t padObj, uint32_t character) {
         out = on;
         fc.charLeft = false; fc.leftShoulder = false; fc.mirrorAim = false;  // no swap button in the original layout
     }
-    if (covered) { fc.charLeft = false; fc.leftShoulder = false; fc.mirrorAim = false; }  // the game's own cover camera must not be mirrored
+    if (covered) {
+        // In low cover and wall cover the game's own camera positions the character, so the orbit shoulder stays off.
+        // The old code also cleared the wanted side outright, which is why the swap key "did nothing" while leaning on
+        // a wall: the aim mirror is what the player actually swaps for there, and it is now kept.  CoverShoulder=0
+        // restores the previous behaviour (everything cleared) if a cover pose ever looks wrong mirrored.
+        if (c.coverShoulder) {
+            fc.charLeft = g_charLeftSide;
+            fc.leftShoulder = false;
+            fc.mirrorAim = g_charLeftSide;
+        } else {
+            fc.charLeft = false; fc.leftShoulder = false; fc.mirrorAim = false;
+        }
+    }
     S.character = character;
     S.gunAim = c.remapButtons ? (aiming && !knifeWins) : (on & P_RT) != 0;
 

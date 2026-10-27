@@ -37,6 +37,7 @@ struct Config {
     bool shoulderAuto = true;       // pick the shoulder from the character (Chris left, Sheva right by default)
     bool shoulderSwapAlways = true; // the shoulder key works outside the aim too (knife stays on LB)
     char shoulderKey[8] = "B";      // keyboard key that swaps the shoulder (letters A-Z, read raw)
+    char crosshairKey[8] = "T";     // keyboard key that switches the crosshair and the laser sight at any time
     unsigned shoulderLeftMask = 1u; // bit per character kind (0x715B90) whose CHARACTER is on the LEFT of the screen
     unsigned shoulderGameCharLeftMask = 0u; // bit per kind: the GAME's own aim side puts the character on the LEFT (RE5: none)
     bool zoomKeys = true;           // F zooms in and C zooms out while aiming a plain gun
@@ -44,6 +45,8 @@ struct Config {
     int zoomMaxStep = 3;            // highest zoom step (3 = three presses, about -60 degrees)
     bool scopeLook = false;         // EXPERIMENTAL, off: writing the aim state per frame freezes the scope pitch
     bool aimPitchSnap = true;       // on an aim press, nudge the game's aim pitch to the view through its own mouse input
+    bool coverShoulder = true;      // keep the shoulder choice (and its aim mirror) while in cover
+    bool laserFill = false;         // EXPERIMENTAL, off: fill the uLaserSight object for the keyboard path
     bool knifeWalk = true;          // walk with the knife readied
     bool reloadWalk = true;         // reload on the move (otherwise standing, camera stays free)
     bool switchWalk = true;         // keep walking while switching weapons
