@@ -44,9 +44,11 @@ struct Config {
     float zoomFovStep = -20.0f;     // degrees of fov per zoom step (negative = closer)
     int zoomMaxStep = 3;            // highest zoom step (3 = three presses, about -60 degrees)
     bool scopeLook = false;         // EXPERIMENTAL, off: writing the aim state per frame freezes the scope pitch
-    bool aimPitchSnap = true;       // on an aim press, nudge the game's aim pitch to the view through its own mouse input
+    bool aimPitchSnap = false;      // EXPERIMENTAL, off: nudge the aim pitch on press (it biased the aim downwards per press)
     bool coverShoulder = true;      // keep the shoulder choice (and its aim mirror) while in cover
     bool laserFill = false;         // EXPERIMENTAL, off: fill the uLaserSight object for the keyboard path
+    bool aimPitchFromMouse = false;  // the mod drives the aim pitch and writes it into cam::LookV every frame
+    bool aimCamera = false;          // keep the mod's camera while aiming (no view jump, the crosshair stays centred)
     bool knifeWalk = true;          // walk with the knife readied
     bool reloadWalk = true;         // reload on the move (otherwise standing, camera stays free)
     bool switchWalk = true;         // keep walking while switching weapons

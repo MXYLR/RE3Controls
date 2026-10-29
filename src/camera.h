@@ -35,6 +35,8 @@ bool AimCameraRay(float eye[3], float dir[3]);
 // Pitch (radians) of the game's own aim camera the last time it was running; the aim start nudges the game's pitch
 // towards the free camera through its own input using this as the "where the aim was" reference.
 float AimPitchLast();
+// Mouse vertical (raww units), the scale to radians and the invert flag, fed by game.cpp for the aim pitch.
+void SetAimMouse(float dy, float scale, bool invert);
 
 // yaw helpers: forward = (sin yaw, 0, cos yaw), right = (-cos yaw, 0, sin yaw)
 // World facing of a character (on a moving boat or platform: its own yaw plus the platform's heading).

@@ -392,6 +392,8 @@ void LoadConfig() {
     c.zoomMaxStep = (int)GetFloat(path, "Zoom", "ZoomMaxStep", (float)c.zoomMaxStep);
     c.scopeLook = GetBool(path, "Zoom", "ScopeLook", c.scopeLook);
     c.laserFill = GetBool(path, "Zoom", "LaserFill", c.laserFill);
+    c.aimCamera = GetBool(path, "Camera", "AimCamera", c.aimCamera);
+    c.aimPitchFromMouse = GetBool(path, "Aim", "AimPitchFromMouse", c.aimPitchFromMouse);
     c.aimPitchSnap = GetBool(path, "Aim", "AimPitchSnap", c.aimPitchSnap);
     c.coverShoulder = GetBool(path, "Controls", "CoverShoulder", c.coverShoulder);
     {

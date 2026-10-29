@@ -408,6 +408,12 @@ static float g_aimEye[3] = {0, 0, 0}, g_aimDir[3] = {0, 0, 1};
 static bool g_aimRayValid = false;
 static float g_aimPitchLast = 0.0f;
 float AimPitchLast() { return g_aimPitchLast; }
+// Mouse vertical for the aim, fed by game.cpp (it owns the mouse deltas): when AimPitchFromMouse is on the mod drives
+// the aim pitch and writes it into cam::LookV every frame.  Writing the RESULT each frame does not accumulate, unlike
+// seeding the state on the press - that was the "every aim walks a little lower" bug.
+static float g_aimMouseDY = 0.0f, g_aimMouseScale = 0.0f;
+static bool g_aimMouseInvert = false;
+void SetAimMouse(float dy, float scale, bool invert) { g_aimMouseDY = dy; g_aimMouseScale = scale; g_aimMouseInvert = invert; }
 bool AimCameraRay(float eye[3], float dir[3]) {
     if (!g_aimRayValid) return false;
     for (int i = 0; i < 3; ++i) { eye[i] = g_aimEye[i]; dir[i] = g_aimDir[i]; }
@@ -512,7 +518,12 @@ static void __fastcall HookQfpsUpdate(uint32_t self, void* edx, uint32_t arg) {
     }
     o.camera = self;
     if (fc.noAimRig) At<uint8_t>(self, cam::AimRig) = 0;
-    const bool own = (active || (c.meleeOnly && o.returning)) && !lookAt && At<uint8_t>(self, cam::AimRig) == 0;
+    // AimCamera: keep the mod's own camera during the aim.  The game's aim camera is a separate camera with its own
+    // pitch, so handing the view over on every aim press made the view jump to a direction the player had not chosen
+    // (and writing our pitch into it to compensate drifted a little on every press).  Keeping the orbit camera means the
+    // view simply does not move when aiming: the crosshair stays where the player was looking.
+    const bool own = (active || (c.meleeOnly && o.returning)) && !lookAt &&
+                     (At<uint8_t>(self, cam::AimRig) == 0 || c.aimCamera);
     if (!own) o.returning = false;
     uint8_t lookEnabled = 0;
     if (own) {
@@ -583,18 +594,24 @@ static void __fastcall HookQfpsUpdate(uint32_t self, void* edx, uint32_t arg) {
             // Restored: the run that the user reported as "basically done" carried the pitch here, BEFORE the game's
             // camera update, with the measured sign.  Removing it (to chase a one-frame jump) is what made the aim
             // stop following the pitch for a plain gun.
-            float v = -fc.pitch / Rad(55.0f);
-            if (v > 1.0f) v = 1.0f;
-            if (v < -1.8f) v = -1.8f;
-            At<float>(self, cam::LookV) = v;
-            g_aimSeedFrames[idx] = 3;
+            // REMOVED: the LookV seed.  Report (3440x1440, Sheva): aiming at the sky and pressing aim/cancel repeatedly
+            // walked the aim from the sky down to the ground without moving the camera.  A seed that the game converts
+            // back through its own scale loses a little pitch per aim when the two scales differ, and the loss adds up
+            // over presses - exactly that drift.  The game keeps its aim pitch between aims, so no seed is needed for a
+            // stable result; fc.pitch below only FOLLOWS the game's pitch, it no longer writes into it.
+            g_aimSeedFrames[idx] = 0;
             // lookV alone does not hold: the game recomputes it every frame and the entry pitch was gone within
             // 0.35 s (trace: camPitch -14.9 at "in", +5.5 at "mid").  The character's aim angles do hold, so they
             // are seeded once as well, here, before the game's camera update uses them.
             const uint32_t chA = At<uint32_t>(self, cam::Parent);
             if (chA && Readable((void*)chA, 0x3000)) {
+                // Absolute aim-pitch hand-off: the character's aim angles are set to the view pitch once per aim.  This
+            // is an absolute write (not a delta and not the LookV channel), so repeated aims converge to the same value
+            // instead of accumulating; the LookV write stays removed because that one WAS additive and drifted.
+            if (chA && Readable((void*)chA, 0x3000)) {
                 At<float>(chA, 0x2908) = fc.pitch;
                 At<float>(chA, 0x290C) = fc.pitch;
+            }
                 // The aim POINT, not only the angles: the game derives the aim direction (and the scope's, and the
                 // knife's, neither of which goes through the bullet convergence the plain gun now uses) from
                 // ch+0x2870, a world point along the aim ray.  Put it on the free camera's ray at the moment the aim
@@ -755,12 +772,21 @@ static void __fastcall HookQfpsUpdate(uint32_t self, void* edx, uint32_t arg) {
             // the atan2 saturates and fc.pitch jumped to its clamps (+55 / -40), which then went into everything that
             // builds a direction from fc.pitch (the knife aim point showed it in the log).  A flat view always has a
             // horizontal distance of hundreds of units, so this guard only rejects degenerate frames.
-            if (len > 10.0f) {
+            if (c.aimPitchFromMouse) {
+                // The mod owns the aim pitch: the mouse feeds fc.pitch and the result goes into the look channel every
+                // frame, so the aim sits exactly where the camera points and nothing accumulates between aims.
+                float d = g_aimMouseDY * g_aimMouseScale * (g_aimMouseInvert ? -1.0f : 1.0f);
+                fc.pitch += d;
+                if (fc.pitch > Rad(55.0f)) fc.pitch = Rad(55.0f);
+                if (fc.pitch < Rad(-40.0f)) fc.pitch = Rad(-40.0f);
+                At<float>(self, cam::LookV) = -fc.pitch / Rad(55.0f);
+                g_aimPitchLast = fc.pitch;
+            } else if (len > 10.0f) {
                 float vp = atan2f(eye[1] - tgt[1], len);
                 if (vp > Rad(55.0f)) vp = Rad(55.0f);
                 if (vp < Rad(-40.0f)) vp = Rad(-40.0f);
                 fc.pitch = vp;
-                g_aimPitchLast = vp;  // reference for the next aim start's pitch nudge
+                g_aimPitchLast = vp;
             }
         }
         if (c.meleeOnly) {

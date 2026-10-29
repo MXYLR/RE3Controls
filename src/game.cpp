@@ -1055,6 +1055,12 @@ static void ApplyControls(uint32_t padObj, uint32_t character) {
             At<float>(character, 0x290C) = fc.pitch;
         }
     }
+    // Feed the mouse vertical to the camera: with AimPitchFromMouse the mod drives the aim pitch from it and writes
+    // the result into the game every frame (see camera.cpp), so the aim stays where the camera points.
+    {
+        const float k = MouseUnitRadians() * c.mouseSensitivity * c.mouseVertical;
+        SetAimMouse(kb.mouseY, k, (MouseInvert() & 1) != 0);
+    }
     S.wasAiming = aimHeld;
 
     // Run = the game's run held: canonical A while moving forward, or without the free camera in control types C/D
