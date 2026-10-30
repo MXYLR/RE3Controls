@@ -193,7 +193,7 @@ gamepad players are unaffected.
 ## Logging
 
 The build writes a few diagnostic lines to RE3Controls.log: `keyq:` (aim/fire key
-queries), `fire: timer=鈥 (the fire-action timer when the hold-off triggers) and
+queries), `fire: timer=閳ヮ泦 (the fire-action timer when the hold-off triggers) and
 `trace:` (a two-second sample after an aim release).  They are rate limited and can be
 ignored, or removed from the sources if you build it yourself.
 ## Fixes in mod64h (added after mod63x)
@@ -212,3 +212,23 @@ ignored, or removed from the sources if you build it yourself.
 
 Still open: using a first-aid spray keeps the character in place (that action is not in
 the walkable set yet).
+## Known limitation: throwing an item and releasing the aim immediately
+
+Throwing a grenade (aim + fire) ends in the game's own `Fire` action and then plays a
+recovery that carries the character forward by **animation root motion**.  Measurements
+made while investigating it:
+
+- the action chain itself is fine (`0x0104456C` phase 1 -> 2 -> 3, then `Wait`);
+- while the character slides, the pad is empty (`padOn = 0`), so the movement is not
+  input-driven;
+- none of the sixteen floats around the character position holds a velocity: the
+  position changes but every neighbouring field stays constant, i.e. the displacement is
+  applied by the model/animation layer, not by a field we can clear.
+
+Reverting the aim during that recovery makes the two poses fight (visible twitch).
+Forcing the action to end, or freezing the position, either breaks the action state
+machine or stops the player's own movement, so all of those were reverted.
+
+**Workaround**: wait for the recovery to finish (about 0.4 s) before letting go of the
+aim button.  This is the only known-safe behaviour; the sources are back at the released
+`v1.9.4-mod63x` state.
