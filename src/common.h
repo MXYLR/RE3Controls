@@ -3,7 +3,7 @@
 
 // Developer build (build.sh dev): dev server, shared-memory bridge with a virtual pad, screenshots. Release builds
 // leave all of it out.
-#define RE3C_VERSION_STR "1.9.4-mod64h"
+#define RE3C_VERSION_STR "1.9.4-mod63x"
 
 #ifndef RE3C_DEV
 #define RE3C_DEV 0

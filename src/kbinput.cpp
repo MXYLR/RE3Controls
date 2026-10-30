@@ -135,7 +135,21 @@ bool __stdcall HookKeyOn(int action, int player) {
     if (Listed(g_lookRet, g_lookCount, ret) && Driving(player) && g_orbit[PlayerOf(player)]) return false;
     if (Listed(g_keyAimRet, g_keyAimCount, ret) && Driving(player) && g_keyAimWalk[PlayerOf(player)]) return false;
     if (Listed(g_invHeldRet, g_invHeldCount, ret) && Driving(player, true)) return false;
-    return oKeyOn(action, player);
+    const bool origAns = oKeyOn(action, player);
+    // Read-only probe: what does the game itself answer for the aim (0xC) and fire (0xE) actions, and for how long after
+    // the button is released.  Rate limited; changes no behaviour.
+    if (action == 0xC || action == 0xE) {
+        static int probeN = 0;
+        static bool lmbPrev = false, rmbPrev = false;
+        const bool rmb = (GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0;
+        const bool lmb = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
+        const bool released = (action == 0xC) ? (rmbPrev && !rmb) : (lmbPrev && !lmb);
+        if (released || (++probeN % 30) == 0)
+            Log("keyq: action=%X orig=%d rmb=%d lmb=%d%s", action, (int)origAns, (int)rmb, (int)lmb,
+                released ? " <released>" : "");
+        rmbPrev = rmb; lmbPrev = lmb;
+    }
+    return origAns;
 }
 
 bool __stdcall HookKeyTrg(int action, int player) {
