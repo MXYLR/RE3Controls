@@ -159,3 +159,40 @@ gamepad players are unaffected.
 | Reload / switch on the move | `ReloadWalk=1`, `SwitchWalk=1` |
 | Aim walking | `GunWalk=1`, `KnifeWalk=1` |
 | Free camera | `FreeCamera=1`, `Shoulder=45`-`60`, `AimDistance=100` |
+---
+
+## Fixes added in this fork (MXYLR), on top of 1.9.4
+
+- **Shoulder swap works everywhere**: keyboard B ([Controls] ShoulderKey) / pad RB at any
+  time, including low cover and wall cover (the game's cover camera is shifted sideways).
+- **Plain-gun zoom**: F in, C out while aiming ([Zoom] ZoomFovStep=-20, ZoomMaxStep=3).
+- **Aim**: the mouse is not zeroed while aiming; shots follow the camera ray; the aim
+  pitch is handed over as an absolute value on the aim press.
+- **No frozen gun after a shot**: the game's fire action waits on a per-object timer
+  (Fire::update, phase 2, `[object+0x20]`).  The mod holds that timer above the
+  threshold while the player is not aiming, so the stance and movement come back at
+  once instead of staying frozen (single-shot weapons, and right after a magazine runs
+  out).
+- **Reload on the move covers the game's own reload**: when a magazine is empty the
+  game reloads by itself; walking and steering are enabled for that action too.
+- **Steering while the gun goes down**: ReadyEnd and Fire are steerable as well, so the
+  character no longer keeps a fixed direction right after leaving the aim.
+- **Melee uses the game's own fixed camera** ([Camera] StockMeleeCamera=1); the knife
+  stance stays on the mod's camera so it can still be turned.
+
+## Known issues in this build
+
+- **Mercenaries countdown**: for a moment after the countdown ends the character can
+  move on its own (the scripted state keeps the pad's direction bits).  Being tracked.
+- **Sniper scope**: the scope view is drawn by the weapon camera and keeps the game's
+  own aim; the fields the mod can write (shot point, aim point, pad input) do not reach
+  it.
+- **Laser sight is pad-only**: the engine only draws it on the pad path; a keyboard
+  player gets the crosshair.
+
+## Logging
+
+The build writes a few diagnostic lines to RE3Controls.log: `keyq:` (aim/fire key
+queries), `fire: timer=…` (the fire-action timer when the hold-off triggers) and
+`trace:` (a two-second sample after an aim release).  They are rate limited and can be
+ignored, or removed from the sources if you build it yourself.

@@ -395,6 +395,7 @@ void LoadConfig() {
     c.aimCamera = GetBool(path, "Camera", "AimCamera", c.aimCamera);
     c.aimPitchFromMouse = GetBool(path, "Aim", "AimPitchFromMouse", c.aimPitchFromMouse);
     c.aimPitchSnap = GetBool(path, "Aim", "AimPitchSnap", c.aimPitchSnap);
+    c.stockMeleeCamera = GetBool(path, "Camera", "StockMeleeCamera", c.stockMeleeCamera);
     c.coverShoulder = GetBool(path, "Controls", "CoverShoulder", c.coverShoulder);
     {
         char ib[16];

@@ -131,6 +131,7 @@ bool FreeCameraAction(uint32_t pawn) {
     // attack 0x6F and the two em10 attacks), and nothing else: taunt (0x2F), dodges, grabs and damage stay stock.
     // One int compare first: the enemy-grab DTI tables are only walked when GrabCamera is on.
     const bool attackAction = (id >= aid::KnifeBegin && id <= aid::KnifeAttack) || IsMeleeAction(id);
+    if (attackAction && IsMeleeAction(id) && c.stockMeleeCamera) return false;
     if (attackAction && (c.freeCamera || c.meleeCamera)) return true;
     if (c.grabCamera && InEnemyGrab(pawn)) return true;
     return false;

@@ -44,6 +44,7 @@ struct Config {
     float zoomFovStep = -20.0f;     // degrees of fov per zoom step (negative = closer)
     int zoomMaxStep = 3;            // highest zoom step (3 = three presses, about -60 degrees)
     bool scopeLook = false;         // EXPERIMENTAL, off: writing the aim state per frame freezes the scope pitch
+    bool stockMeleeCamera = true;
     bool aimPitchSnap = false;      // EXPERIMENTAL, off: nudge the aim pitch on press (it biased the aim downwards per press)
     bool coverShoulder = true;      // keep the shoulder choice (and its aim mirror) while in cover
     bool laserFill = false;         // EXPERIMENTAL, off: fill the uLaserSight object for the keyboard path

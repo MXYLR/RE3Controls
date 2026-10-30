@@ -731,7 +731,7 @@ static void ApplyControls(uint32_t padObj, uint32_t character) {
             S.reload = ReloadPhase::Request;
             S.reloadT = 0;
             S.reloadTries = 0;
-            S.reloadMove = (!aiming || (At<uint8_t>(character, ch::Scope) != 0 && c.scopeWalk && c.reloadWalk)) &&
+            S.reloadMove = c.reloadWalk &&
                        !(ride & 0xF00);
         }
         S.reloadT += dt;
@@ -764,7 +764,8 @@ static void ApplyControls(uint32_t padObj, uint32_t character) {
     } else {
         S.reload = ReloadPhase::Idle;  // switched off in the ini meanwhile
     }
-    if (S.reloadMove && ((aimHeld && At<uint8_t>(character, ch::Scope) == 0) ||
+    if (S.reloadMove && (S.reload == ReloadPhase::Idle && !AimWalkState(character))) S.reloadMove = false;
+    if (false && ((aimHeld && At<uint8_t>(character, ch::Scope) == 0) ||
                           (S.reload == ReloadPhase::Idle && !AimWalkState(character)))) S.reloadMove = false;
     const bool reloadMove = S.reloadMove;
     // Switching weapons (d-pad, keys 1-9, the wheel): the switch plays standing; the leg layer keeps walking, as for
@@ -972,7 +973,13 @@ static void ApplyControls(uint32_t padObj, uint32_t character) {
             At<float>(padObj, pp::RMag) = 0;
             out &= ~P_RS_DIRS;
             // Only once the reload has started (a refused request leaves the walk as it is).
-            const bool moveSteer = (reloadMove && c.reloadWalk && action == plact::Reload) || changeMove;
+            // Steering must work for the game's own (empty-magazine) reload too, not only for one the player started: without
+    // this the character walked in a straight line with a fixed direction.  Direction is taken whenever the reload action
+    // is running and ReloadWalk is on.
+    // Leaving the aim plays ReadyEnd for a moment; steering was not taken there, so the character kept the direction it
+    // had when the gun went down.  The fire action is included for the same reason.
+    const bool moveSteer = ((reloadMove || action == plact::Reload) && c.reloadWalk && action == plact::Reload) ||
+                           ((action == plact::ReadyEnd || action == plact::Fire) && !aimHeld) || changeMove;
             if (stickMag >= 0.3f && fc.initialised && S.quickTurnT < 0 && (InLocomotion(character) || moveSteer)) {
                 // BackStep: toward the camera without running steps back, facing where the camera looks (the game's
                 // own walk back), as in the original game; a reload or switch on the move steps back too. A counts
@@ -1130,7 +1137,10 @@ static void ApplyControls(uint32_t padObj, uint32_t character) {
     const bool scope = At<uint8_t>(character, ch::Scope) != 0;
     const bool scopeWalk = scope && c.scopeWalk && (kbm || PadAimsWithRightStick(character));
     const bool zoomHold = scope && !kbm && (phys & partnerBit);
-    const bool walkAllowed = ((aiming && !knifeWins && c.gunWalk) || (knife && (!aiming || knifeWins) && c.knifeWalk) ||
+    // The RELOAD action itself is walkable, whoever started it: when a magazine runs out the game reloads by itself and
+    // the mod's own reload state (reloadMove) is never set, so the character stood still.  ReloadWalk is the switch.
+    const bool walkAllowed = ((action == plact::Reload && !aimHeld && c.reloadWalk) ||
+                              (aiming && !knifeWins && c.gunWalk) || (knife && (!aiming || knifeWins) && c.knifeWalk) ||
                               (reloadMove && c.reloadWalk) || (action == plact::ReadyEnd && c.gunWalk) ||
                               (knifeState && !aimHeld && c.knifeWalk) || changeMove) &&
                              !(switching && !c.switchWalk) && (!scope || (scopeWalk && !zoomHold)) &&
@@ -1204,6 +1214,43 @@ static void ApplyControls(uint32_t padObj, uint32_t character) {
     // Rebuild the edge masks against what the game saw last frame (Old holds our previous output).
     const uint32_t old = At<uint32_t>(padObj, pp::Old);
     const uint32_t trg = ((out & ~old) | (forceTrg & out)) & ~dropTrg;
+    // CE dump of the stuck action (51 samples, byte-identical): the Fire object sits at phase 2 with every field frozen,
+    // i.e. the game is waiting for an input that never comes - after a shot released early, and when a magazine runs out.
+    // A single fire/reload press in that state lets the phase advance again (Fire -> ReadyEnd -> Wait).
+    {
+        static int stuckFrames[8] = {};
+        static int pushFrames[8] = {};
+        const int sl = slot & 7;
+        const uint32_t actSt = Readable((void*)(character + ch::CurAction), 4) ? At<uint32_t>(character, ch::CurAction) : 0;
+        const bool stuck = actSt && Readable((void*)actSt, 4) && At<uint32_t>(actSt, 0) == 0x01044510 &&
+                           Readable((void*)(actSt + 0x14), 1) && At<uint8_t>(actSt, 0x14) == 2 && !aimHeld;
+        if (stuck) {
+            // EVERY FRAME, not once per 0.5 s: the game accumulates [object+0x20] after this point, so a single write is
+            // overwritten before the comparison runs.  Keeping it above any threshold every frame is what actually ends
+            // the wait.  +0x24 is written too in case the threshold is taken from the object instead of the stack.
+            At<float>(actSt, 0x20) = 999.0f;
+            At<float>(actSt, 0x24) = 999.0f;
+            if (++stuckFrames[sl] > 30) {          // ~0.5 s
+                // The CE dump showed the Fire object frozen at phase 2 with every field identical: its update is not
+                // running, so no input can move it (a pushed X did nothing).  Advance its own phase byte instead, which
+                // is what the action does when it does run (0 -> 0xA -> 0x14).
+                // Static analysis of the phase-2 block (0xC8A4A4): it waits on the timer at [object+0x20] against two
+                // thresholds (comiss + jb) and only then sets the state bits and drops to the exit.  The CE samples showed
+                // that timer frozen at 65.0, so the comparison never passes.  Pushing it over the threshold ends the
+                // wait without changing the state machine's path.
+                // Record what the phase-2 wait actually holds: the accumulator it compares, and the two floats that
+                // live next to it in the object.  One line per stuck episode.
+                Log("fire: timer=%.2f f1c=%.3f f24=%.3f phase=%d", At<float>(actSt, 0x20), At<float>(actSt, 0x1C),
+                    At<float>(actSt, 0x24), (int)At<uint8_t>(actSt, 0x14));
+                if (At<float>(actSt, 0x20) < 900.0f) At<float>(actSt, 0x20) = 999.0f;
+                stuckFrames[sl] = 0;
+                Log("fire stuck: advanced the Fire phase byte to %d", (int)At<uint8_t>(actSt, 0x14));
+            }
+        } else {
+            stuckFrames[sl] = 0;
+        }
+        (void)pushFrames;
+    }
     on = out;
     At<uint32_t>(padObj, pp::Trg) = trg;
     At<uint32_t>(padObj, pp::Rel) = old & ~out;
