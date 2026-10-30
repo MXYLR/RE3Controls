@@ -1139,12 +1139,21 @@ static void ApplyControls(uint32_t padObj, uint32_t character) {
     const bool zoomHold = scope && !kbm && (phys & partnerBit);
     // The RELOAD action itself is walkable, whoever started it: when a magazine runs out the game reloads by itself and
     // the mod's own reload state (reloadMove) is never set, so the character stood still.  ReloadWalk is the switch.
-    const bool walkAllowed = ((action == plact::Reload && !aimHeld && c.reloadWalk) ||
+    bool walkAllowedRaw = ((action == plact::Reload && !aimHeld && c.reloadWalk) ||
                               (aiming && !knifeWins && c.gunWalk) || (knife && (!aiming || knifeWins) && c.knifeWalk) ||
                               (reloadMove && c.reloadWalk) || (action == plact::ReadyEnd && c.gunWalk) ||
                               (knifeState && !aimHeld && c.knifeWalk) || changeMove) &&
                              !(switching && !c.switchWalk) && (!scope || (scopeWalk && !zoomHold)) &&
                              !(ride & 0x4000);  // riding: anchored
+    // A layer that starts and stops on every other frame makes the body twitch (the grenade throw report).  Once it is
+    // allowed it stays allowed for a few frames, so a borderline action no longer toggles it at frame rate.
+    {
+        static int hold[8] = {};
+        const int hs = slot & 7;
+        if (walkAllowedRaw) hold[hs] = 8;
+        else if (hold[hs] > 0) { --hold[hs]; walkAllowedRaw = true; }
+    }
+    const bool walkAllowed = walkAllowedRaw;
     if (kbm)
         KbSetDriving(slot, (InLocomotion(character) || AimWalkState(character) || changeMove ||
                             (aimHeld && switching) || S.quickTurnT >= 0 || action == plact::Turn180) &&
@@ -1222,7 +1231,10 @@ static void ApplyControls(uint32_t padObj, uint32_t character) {
         static int pushFrames[8] = {};
         const int sl = slot & 7;
         const uint32_t actSt = Readable((void*)(character + ch::CurAction), 4) ? At<uint32_t>(character, ch::CurAction) : 0;
-        const bool stuck = actSt && Readable((void*)actSt, 4) && At<uint32_t>(actSt, 0) == 0x01044510 &&
+        const uint32_t vtSt = (actSt && Readable((void*)actSt, 4)) ? At<uint32_t>(actSt, 0) : 0;
+        // Two actions stall in the same way, both waiting on the timer at +0x20 while their phase stays at 2: the shot
+        // (Fire, 0x01044510) and the thrown item (0x01044F38, action id 0x57 - the grenade throw, measured with a probe).
+        const bool stuck = actSt && (vtSt == 0x01044510 || vtSt == 0x01044F38) &&
                            Readable((void*)(actSt + 0x14), 1) && At<uint8_t>(actSt, 0x14) == 2 && !aimHeld;
         if (stuck) {
             // EVERY FRAME, not once per 0.5 s: the game accumulates [object+0x20] after this point, so a single write is

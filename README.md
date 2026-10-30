@@ -193,6 +193,22 @@ gamepad players are unaffected.
 ## Logging
 
 The build writes a few diagnostic lines to RE3Controls.log: `keyq:` (aim/fire key
-queries), `fire: timer=…` (the fire-action timer when the hold-off triggers) and
+queries), `fire: timer=鈥 (the fire-action timer when the hold-off triggers) and
 `trace:` (a two-second sample after an aim release).  They are rate limited and can be
 ignored, or removed from the sources if you build it yourself.
+## Fixes in mod64h (added after mod63x)
+
+- **Grenade throw no longer locks the character.**  A probe showed the thrown-item
+  action (`0x01044F38`, action id `0x57`) stalls exactly like the shot: phase 2,
+  waiting on the timer at `[object+0x20]`.  The same hold-off now covers it, so after
+  a throw the aim can be cancelled again and the character does not twitch when you
+  move.
+- **Leg layer hysteresis**: it stays enabled for 8 frames once allowed, so a
+  borderline action no longer toggles it at frame rate.
+- **Mercenaries countdown**: the movement seen after the countdown was a movement key
+  held before control was handed back, not a stuck state - releasing the key stops the
+  character.  No code change.
+- The diagnostic `keyq:` probe was removed.
+
+Still open: using a first-aid spray keeps the character in place (that action is not in
+the walkable set yet).
