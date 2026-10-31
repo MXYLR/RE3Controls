@@ -518,7 +518,9 @@ static void ApplyControls(uint32_t padObj, uint32_t character) {
             physTrg &= ~P_L3;
         }
     }
-    const bool aiming = (phys & P_LT) != 0;
+    const uint32_t aidGate = At<uint32_t>(character, ch::ActionId);
+    const bool busyAction = ((aidGate >= 0x28 && aidGate <= 0x4D) || (aidGate >= 0x90 && aidGate <= 0x99));
+    const bool aiming = ((phys & P_LT) != 0) && !busyAction;   // the aim would turn the character mid-action
     const bool knife = (phys & P_LB) != 0;
     const bool aimHeld = aiming || knife;
     // KnifeFromAim: LB pressed while LT is held readies the knife from the gun aim (the game's own knife + gun bits
@@ -1142,7 +1144,7 @@ static void ApplyControls(uint32_t padObj, uint32_t character) {
     const bool walkAllowed = ((action == plact::Reload && !aimHeld && c.reloadWalk) ||
                               (aiming && !knifeWins && c.gunWalk) || (knife && (!aiming || knifeWins) && c.knifeWalk) ||
                               (reloadMove && c.reloadWalk) || (action == plact::ReadyEnd && c.gunWalk) ||
-                              (knifeState && !aimHeld && c.knifeWalk) || changeMove) &&
+                              (knifeState && !aimHeld && c.knifeWalk && actionId != aid::KnifeAttack) || changeMove) &&
                              !(switching && !c.switchWalk) && (!scope || (scopeWalk && !zoomHold)) &&
                              !(ride & 0x4000);  // riding: anchored
     if (kbm)
@@ -1251,6 +1253,7 @@ static void ApplyControls(uint32_t padObj, uint32_t character) {
         }
         (void)pushFrames;
     }
+    if (busyAction) out &= ~(P_LT | P_RT);
     on = out;
     At<uint32_t>(padObj, pp::Trg) = trg;
     At<uint32_t>(padObj, pp::Rel) = old & ~out;
@@ -1360,13 +1363,16 @@ static void InstallRawHoldPatches() {
 static CRITICAL_SECTION g_padLock;
 static volatile LONG g_padLockInit = 0;
 
-static void __fastcall HookPlayerPadUpdate(uint32_t self, void* edx) {
-    oPlayerPadUpdate(self, edx);
+void InitPadLock() {
     if (InterlockedCompareExchange(&g_padLockInit, 1, 0) == 0) {
         InitializeCriticalSection(&g_padLock);
         InterlockedExchange(&g_padLockInit, 2);
     }
-    while (g_padLockInit != 2) Sleep(0);
+}
+
+static void __fastcall HookPlayerPadUpdate(uint32_t self, void* edx) {
+    if (g_padLockInit != 2) InitPadLock();
+    oPlayerPadUpdate(self, edx);
     struct Lock {
         Lock() { EnterCriticalSection(&g_padLock); }
         ~Lock() { LeaveCriticalSection(&g_padLock); }

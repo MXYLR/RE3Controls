@@ -193,7 +193,7 @@ gamepad players are unaffected.
 ## Logging
 
 The build writes a few diagnostic lines to RE3Controls.log: `keyq:` (aim/fire key
-queries), `fire: timer=閳ヮ泦 (the fire-action timer when the hold-off triggers) and
+queries), `fire: timer=闁炽儺娉?(the fire-action timer when the hold-off triggers) and
 `trace:` (a two-second sample after an aim release).  They are rate limited and can be
 ignored, or removed from the sources if you build it yourself.
 ## Fixes in mod64h (added after mod63x)
@@ -232,3 +232,27 @@ machine or stops the player's own movement, so all of those were reverted.
 **Workaround**: wait for the recovery to finish (about 0.4 s) before letting go of the
 aim button.  This is the only known-safe behaviour; the sources are back at the released
 `v1.9.4-mod63x` state.
+## Stable build: 1.9.4-mod67
+
+Only fixes that were verified in play are in this build:
+
+- **Picking items up no longer freezes the game.** The player-pad hook created its critical section lazily and
+  then spun on `while (init != 2) Sleep(0)`, which could hang for ever on the path taken while picking an item up.
+  The section is now created at start-up and there is no wait at all.
+- **The aim button does nothing while a melee, a vault or an interaction plays.** It used to turn the character
+  toward the camera mid-animation; `aiming` is now gated at the source for those actions and the pad bits are
+  stripped as a second net.
+- **The knife attack no longer fights the leg layer**, so the character can turn again while slashing.
+- Everything else is the released `v1.9.4-mod63x` behaviour: fire-cancel and movement after a shot, walking and
+  steering during an empty-magazine reload, steering while the gun goes down, shoulder swap, plain-gun zoom,
+  melee on the game's own camera.
+
+### Known issues (not fixed, with the workaround)
+
+- **Quick slash on the knife key (V) does not come out.** The game raises the knife (KnifeBegin) but never
+  reaches the attack action from that entry point in this remap. Holding the aim button and then using the attack
+  button works and is the workaround. Measurements: the action chain stays at `0x22` when only the knife key is
+  used, and re-aiming/writing the aim point on the attack action is what lets it reach `0x27` - but that write also
+  interrupts the swing.
+- **Throwing an item and releasing the aim immediately**: the throw's recovery carries the character forward by
+  animation root motion. Waiting for the recovery to finish before letting go of the aim avoids the twitch.
