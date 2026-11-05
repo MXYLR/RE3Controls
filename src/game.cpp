@@ -1426,8 +1426,13 @@ static void ApplyControls(uint32_t padObj, uint32_t character) {
             static int loggedE = 0;
             // Walk pace by default; the run input (or a run-mode toggle) doubles it, so the sword/spray/throw move
             // like the rest of the movement instead of creeping.
-            const float speedE = (runIntent || (phys & runBit)) ? 430.0f : 220.0f;
-            const bool moved = EngineMoveStep(character, yawE, speedE, (float)dt);
+            // Ramp the speed in and out over about a tenth of a second: writing the full step on the first frame of a
+            // slash looked like a teleport.
+            static float rampE = 0.0f;
+            const float targetE = (runIntent || (phys & runBit)) ? 430.0f : 220.0f;
+            const float kE = (float)dt * 10.0f;
+            rampE += (targetE - rampE) * (kE > 1.0f ? 1.0f : kE);
+            const bool moved = EngineMoveStep(character, yawE, rampE, (float)dt);
             if (moved) {
                 if (loggedE < 6) {
                     ++loggedE;
