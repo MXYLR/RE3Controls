@@ -137,6 +137,9 @@ static const char kDefaultIni[] =
     "\r\n"
     "; Centred crosshair instead of laser sight\r\n"
     "          Crosshair=1\r\n"
+          "; visible laser tint: 0..360 degrees (-1 keeps the game's red); LaserRGB animates it\r\n"
+          "LaserHue=-1\r\n"
+          "LaserRGB=0\r\n"
     "\r\n"
     "; Size of the mod's crosshair (0.25 \342\200\223 4.0)\r\n"
     "          CrosshairSize=0.5\r\n"
@@ -432,6 +435,8 @@ void LoadConfig() {
         float v = 1.0f;
         c.shotgunSpread = ParseNumber(buf, &v) && v >= 0.0f && v <= 1.0f ? v : 1.0f;  // anything else: the original
     }
+    c.laserHue = (int)GetPrivateProfileIntA("Aim", "LaserHue", c.laserHue, path);
+    c.laserRgb = GetBool(path, "Aim", "LaserRGB", c.laserRgb);
     c.engineMove = GetBool(path, "Movement", "EngineMove", c.engineMove);
     c.moveWalk = GetScale(path, "Movement", "MoveWalkSpeed", 0.5f, 2.0f);
     c.moveRun = GetScale(path, "Movement", "MoveRunSpeed", 0.5f, 2.0f);

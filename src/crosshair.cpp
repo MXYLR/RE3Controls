@@ -129,6 +129,49 @@ void Restore(HiddenLaser& h) {
     h.laser = 0;
 }
 
+
+// Tint a visible laser.  The game stores three colour vectors (beam, dot, dot glow) plus four extra entries; the
+// brightness of each is kept and only the hue changes, so the beam keeps its strength.
+void HueToRgb(float h, float* r, float* g, float* b) {
+    h = fmodf(h, 360.0f);
+    if (h < 0.0f) h += 360.0f;
+    const float x = 1.0f - fabsf(fmodf(h / 60.0f, 2.0f) - 1.0f);
+    float rr = 0, gg = 0, bb = 0;
+    if (h < 60) { rr = 1; gg = x; }
+    else if (h < 120) { rr = x; gg = 1; }
+    else if (h < 180) { gg = 1; bb = x; }
+    else if (h < 240) { gg = x; bb = 1; }
+    else if (h < 300) { rr = x; bb = 1; }
+    else { rr = 1; bb = x; }
+    *r = rr; *g = gg; *b = bb;
+}
+
+void ApplyLaserTint(uint32_t laser) {
+    if (!IsLaser(laser)) return;
+    const Config& cfg = Cfg();
+    if (cfg.laserHue < 0 && !cfg.laserRgb) return;
+    float hue = (float)cfg.laserHue;
+    if (cfg.laserRgb) hue = (float)((GetTickCount() / 1000.0 * 60.0));
+    float r, g, b;
+    HueToRgb(hue, &r, &g, &b);
+    for (int i = 0; i < 3; ++i) {
+        float* col = (float*)(laser + kLaserColors[i]);
+        const float peak = kLaserDefaults[i][0] > 1.0f ? kLaserDefaults[i][0] : 1.0f;
+        col[0] = r * peak;
+        col[1] = g * peak;
+        col[2] = b * peak;
+        col[3] = kLaserDefaults[i][3];
+    }
+    for (int i = 0; i < 4; ++i) {
+        float* col = (float*)(laser + kLaserExtra[i]);
+        const float peak = kLaserExtraDefaults[i][0];
+        col[0] = r * peak;
+        col[1] = g * peak;
+        col[2] = b * peak;
+        col[3] = kLaserExtraDefaults[i][3];
+    }
+}
+
 void HideLaser(uint32_t laser) {
     if (!IsLaser(laser)) return;
     HiddenLaser* h = nullptr;
@@ -394,6 +437,7 @@ void __fastcall HookReticle(uint32_t cockpit, void* edx) {
             }
         } else {
             ShowLaser(laser);
+            ApplyLaserTint(laser);
         }
     }
     oReticle(cockpit, edx);

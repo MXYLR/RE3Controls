@@ -56,6 +56,8 @@ struct Config {
     float aimWalkAnimSpeed = 1.125f;  // playback rate of the walk/strafe clip (its root motion moves the character)
     float aimWalkFastSpeed = 1.875f;  // fast walk (L3 while aiming)
     float knifeSpeed = 1.5f;        // knife attack speed
+    int laserHue = -1;            // 0..360: tint the visible laser; -1 keeps the game's colours
+    bool laserRgb = false;        // animate the tint through the spectrum (six seconds per cycle)
     bool crosshair = true;
     float crosshairSize = 0.5f;     // crosshair scale (0.25..4): 1 = the game's own mouse crosshair
     bool directHorizontal = true;   // horizontal stick turns the aim at once, not the arms first
