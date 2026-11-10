@@ -186,6 +186,8 @@ static const char kDefaultIni[] =
     "[Movement]\r\n"
     "; EXPERIMENTAL, off: the mod replaces the native walk/run/back updates so it owns the step\r\n"
     "EngineMove=0\r\n"
+          "; EXPERIMENTAL, off: shorten the partner AI movement timers so it repositions while shooting\r\n"
+          "CompanionMove=0\r\n"
     "\r\n"
     "; Walking / running speed outside of aiming\r\n"
     "          MoveWalkSpeed=1.0\r\n"
@@ -438,6 +440,7 @@ void LoadConfig() {
     c.laserHue = (int)GetPrivateProfileIntA("Aim", "LaserHue", c.laserHue, path);
     c.laserRgb = GetBool(path, "Aim", "LaserRGB", c.laserRgb);
     c.engineMove = GetBool(path, "Movement", "EngineMove", c.engineMove);
+    c.companionMove = GetBool(path, "Characters", "CompanionMove", c.companionMove);
     c.moveWalk = GetScale(path, "Movement", "MoveWalkSpeed", 0.5f, 2.0f);
     c.moveRun = GetScale(path, "Movement", "MoveRunSpeed", 0.5f, 2.0f);
     c.noColorFilter = GetBool(path, "Visual", "NoColorFilter", c.noColorFilter);

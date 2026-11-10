@@ -17,6 +17,7 @@
 #include "re5.h"
 #include "config.h"
 #include "camera.h"
+#include "movehook.h"
 #include "crosshair.h"
 #include <math.h>
 #include <string.h>
@@ -441,6 +442,42 @@ static void AimTrace(uint32_t self, int idx, const char* when) {
     Log("aimtrace[%s] camPitch=%+.1f lookV=%+.2f aim8=%+.1f aimC=%+.1f shotY=%+.0f rayY=%+.0f",
         when, camPitch, At<float>(self, cam::LookV), a8, aC, shotY, rayY);
 }
+
+// AI companion: the engine suppresses locomotion while it fires (action 0x1E) or uses an item, so the companion stands
+// still.  The camera component is updated for every character, and cam::Parent gives us its character, so the AI partner
+// can be stepped toward the player while such an action runs - a companion that keeps moving while it shoots.
+void CompanionMoveTick(uint32_t camObj, int idx) {
+    if (idx >= 0 || !camObj) return;                       // the local player is handled by the pad path
+    if (!Readable((void*)(camObj + cam::Parent), 4)) return;
+    const uint32_t ch = At<uint32_t>(camObj, cam::Parent);
+    if (!ch || !Readable((void*)ch, 0x3000)) return;
+    if (At<uint8_t>(ch, ch::NetControl) != 1) return;      // AI partner only
+    const uint32_t aid = At<uint32_t>(ch, ch::ActionId);
+    if (!((aid == 0x1E) || (aid >= 0x59 && aid <= 0x68))) return;
+    uint32_t local = 0;
+    for (int i = 0; i < 4; ++i)
+        if (g_cams[i].character && g_cams[i].character != ch) { local = g_cams[i].character; break; }
+    if (!local) return;
+    float lp[3], cp[3];
+    CharacterWorldPos(local, lp);
+    CharacterWorldPos(ch, cp);
+    const float dx = lp[0] - cp[0], dz = lp[2] - cp[2];
+    const float d = sqrtf(dx * dx + dz * dz);
+    if (d < 260.0f) return;                                // close enough: let it shoot from where it is
+    static DWORD lastT = 0;
+    const DWORD now = GetTickCount();
+    if (!lastT) { lastT = now; return; }
+    const float dt = (float)(now - lastT) / 1000.0f;
+    lastT = now;
+    if (dt <= 0.0f || dt > 0.2f) return;
+    const float yaw = atan2f(dx, dz);
+    if (EngineMoveStep(ch, yaw, 150.0f, dt)) {
+        static int n = 0;
+        if ((n++ % 60) == 1)
+            Log("companion: aid=%02X dist=%.0f -> step toward player", aid, d);
+    }
+}
+
 static void __fastcall HookQfpsUpdate(uint32_t self, void* edx, uint32_t arg) {
     const Config& c = Cfg();
     if (!c.enabled) {
@@ -448,6 +485,7 @@ static void __fastcall HookQfpsUpdate(uint32_t self, void* edx, uint32_t arg) {
         return;
     }
     const int idx = OurCamera(self);
+    if (c.engineMove) CompanionMoveTick(self, idx);
     if (!(c.freeCamera || c.meleeOnly) || idx < 0) {
         // Other characters' cameras (the online partner's) update too: only a camera losing its orbit (or the orbit
         // being switched off) drops what that orbit remembers.

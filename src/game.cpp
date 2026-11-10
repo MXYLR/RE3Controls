@@ -17,6 +17,7 @@
 #include "inventory.h"
 #include "kbinput.h"
 #include "movehook.h"
+#include "companion.h"
 #include <d3d9.h>
 #include <math.h>
 #include "MinHook.h"
@@ -1417,33 +1418,34 @@ static void ApplyControls(uint32_t padObj, uint32_t character) {
     // slash, an item use or a throw plays, so the actor is moved here instead, in the camera's direction.
     if (EngineMovementActive() && freeCam && fc.initialised && stickMag >= 0.3f) {
         const uint32_t aidE = At<uint32_t>(character, ch::ActionId);
-        // Every action where the engine suppresses locomotion: the slash, the whole fire action (which also carries the
-        // throw) and the item group.  The item ids differ per build (0x59-0x60, 0x5F-0x63 have all been observed for the
-        // spray), so the whole group is covered instead of one id.
-        const bool lockedMove = (aidE == aid::KnifeAttack) || (aidE == 0x1E) || (aidE >= 0x59 && aidE <= 0x68);
-        if (lockedMove) {
+        // Every action where the engine suppresses locomotion.  The slash already carries its own forward lunge, so its
+        // extra step is kept small; the item and throw steps are matched to a walk.  A normal shot (fire action before the
+        // throw phase) is left alone.
+        int firePhaseE = -1;
+        if (aidE == 0x1E) {
+            const uint32_t aoE = Readable((void*)(character + ch::CurAction), 4) ? At<uint32_t>(character, ch::CurAction) : 0;
+            if (aoE && Readable((void*)(aoE + 0x14), 1)) firePhaseE = (int)At<uint8_t>(aoE, 0x14);
+        }
+        float baseSpeedE = 0.0f;
+        if (aidE == aid::KnifeAttack) baseSpeedE = 90.0f;                    // the lunge does the rest
+        else if (aidE >= 0x59 && aidE <= 0x68) baseSpeedE = 160.0f;          // item use
+        else if (aidE == 0x1E && firePhaseE >= 0x20) baseSpeedE = 160.0f;    // the throw branch only
+        if (baseSpeedE > 0.0f) {
             const float yawE = StickWorldYaw(fc, st.lx, st.ly);
-            static int loggedE = 0;
-            // Walk pace by default; the run input (or a run-mode toggle) doubles it, so the sword/spray/throw move
-            // like the rest of the movement instead of creeping.
             // Ramp the speed in and out over about a tenth of a second: writing the full step on the first frame of a
             // slash looked like a teleport.
             static float rampE = 0.0f;
-            const float targetE = (runIntent || (phys & runBit)) ? 430.0f : 220.0f;
+            const float targetE = (runIntent || (phys & runBit)) ? baseSpeedE * 1.6f : baseSpeedE;
             const float kE = (float)dt * 10.0f;
             rampE += (targetE - rampE) * (kE > 1.0f ? 1.0f : kE);
             const bool moved = EngineMoveStep(character, yawE, rampE, (float)dt);
             if (moved) {
+                static int loggedE = 0;
                 if (loggedE < 6) {
                     ++loggedE;
                     const uint32_t po = character + ch::Pos;
-                    Log("enginemove: aid=%02X yaw=%.1f dt=%.3f pos=%.1f,%.1f", aidE, yawE * 57.3f, (float)dt,
+                    Log("enginemove: aid=%02X speed=%.0f dt=%.3f pos=%.1f,%.1f", aidE, rampE, (float)dt,
                         At<float>(po, 0), At<float>(po, 8));
-                }
-                static int everyE = 0;
-                if ((++everyE % 25) == 1) {
-                    const uint32_t po = character + ch::Pos;
-                    Log("enginemove: aid=%02X pos=%.1f,%.1f", aidE, At<float>(po, 0), At<float>(po, 8));
                 }
             }
         }
@@ -1606,6 +1608,49 @@ struct ChangedPrompt { uint32_t req, stamp; };
 static ChangedPrompt g_changed[32];
 static uint32_t g_changedNext = 0;
 
+
+// The engine calls ActionSlot::Check from exactly one place (x00767576 inside ButtonMgr::checkAll).  Hooking that call
+// instead of the function entry keeps x00766F00 untouched, so another plugin that entry-hooks it (RE5PartnerAI does)
+// keeps working - the same approach RE5QTE uses.
+constexpr uint32_t kActionCheckCallSite = 0x00767576;
+constexpr uint8_t kCallOpcode = 0xE8;
+
+static bool __fastcall CallStockActionCheck(uint32_t self, void* edx, uint32_t pad, uint32_t slot) {
+    typedef char(__thiscall * Fn)(void* self, uint32_t pad, uint32_t slot);
+    (void)edx;
+    return ((Fn)(uintptr_t)0x00766F00)((void*)(uintptr_t)self, pad, slot) != 0;
+}
+
+// Re-encode the five-byte call so it reaches `hook`, after proving it really is a call to ActionSlot::Check.
+static bool HookActionCheckCallSite(void* hook) {
+    uint8_t* at = (uint8_t*)kActionCheckCallSite;
+    if (!Readable(at, 5) || at[0] != kCallOpcode) {
+        Log("hook ActionSlot::Check: call-site %08X is not a call (byte %02X)", kActionCheckCallSite,
+            Readable(at, 1) ? at[0] : 0);
+        return false;
+    }
+    int32_t rel = 0;
+    memcpy(&rel, at + 1, 4);
+    const uint32_t target = kActionCheckCallSite + 5 + (uint32_t)rel;
+    if (target != 0x00766F00) {
+        Log("hook ActionSlot::Check: call-site targets %08X, expected 00766F00", target);
+        return false;
+    }
+    DWORD old = 0;
+    if (!VirtualProtect(at, 5, PAGE_EXECUTE_READWRITE, &old)) {
+        Log("hook ActionSlot::Check: VirtualProtect failed");
+        return false;
+    }
+    const uint32_t from = (uint32_t)(uintptr_t)hook;
+    const int32_t newRel = (int32_t)(from - (kActionCheckCallSite + 5));
+    at[0] = kCallOpcode;
+    memcpy(at + 1, &newRel, 4);
+    FlushInstructionCache(GetCurrentProcess(), at, 5);
+    VirtualProtect(at, 5, old, &old);
+    Log("hook ActionSlot::Check: call-site redirected to %08X", from);
+    return true;
+}
+
 static bool __fastcall HookActionCheck(uint32_t self, void* edx, uint32_t pad, uint32_t slot) {
     const Config& c = Cfg();
     const uint32_t req = Readable((void*)self, 0x40) ? At<uint32_t>(self, act::Request) : 0;
@@ -1699,12 +1744,13 @@ void InitGameHooks() {
     InitBalanceHooks();
     InitKeyboardHooks();
   InitMovementHooks();
+  InitCompanionHooks();
     static const BYTE sigPad[] = {0x83, 0xEC, 0x28, 0x0F, 0x57, 0xC0, 0x53, 0x56, 0x8B, 0xF1};
     bool ok = HookAt(kFnPlayerPadUpdate, sigPad, sizeof(sigPad), (void*)HookPlayerPadUpdate,
                      (void**)&oPlayerPadUpdate, "PlayerPad::Update");
-    static const BYTE sigAct[] = {0x53, 0x56, 0x8B, 0xF1, 0x8B, 0x46, 0x0C, 0x32, 0xDB};
-    ok &= HookAt(kFnActionCheck, sigAct, sizeof(sigAct), (void*)HookActionCheck, (void**)&oActionCheck,
-                 "ActionSlot::Check");
+    // ActionSlot::Check is reached through its single call site: the entry at 00766F00 stays free for other plugins.
+    oActionCheck = CallStockActionCheck;
+    ok &= HookActionCheckCallSite((void*)HookActionCheck);
     // All hooks go live together: the game's threads are paused once instead of once per hook.
     const MH_STATUS applied = MH_ApplyQueued();
     if (applied != MH_OK) {
