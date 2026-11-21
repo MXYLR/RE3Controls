@@ -51,7 +51,7 @@ struct Config {
     bool coverShoulder = true;      // keep the shoulder choice (and its aim mirror) while in cover
     bool laserFill = false;         // EXPERIMENTAL, off: fill the uLaserSight object for the keyboard path
     bool aimPitchFromMouse = false;  // the mod drives the aim pitch and writes it into cam::LookV every frame
-    bool aimCamera = false;          // keep the mod's camera while aiming (no view jump, the crosshair stays centred)
+    bool aimCamera = true;           // keep the mod's camera while aiming (no view jump, the crosshair stays centred)
     bool knifeWalk = true;          // walk with the knife readied
     bool reloadWalk = true;         // reload on the move (otherwise standing, camera stays free)
     bool switchWalk = true;         // keep walking while switching weapons

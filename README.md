@@ -172,7 +172,6 @@ The mod writes a fully commented `RE3Controls.ini` next to the DLL on the first 
 |---|---|---|
 | `Enabled` | `1` |  |
 | `StockMeleeCamera` | `1` | Mode: Full = everything below; MeleeCamera = the original game, except that the camera stays free and turns with the right stick during melee attacks (of [Camera] 1 = melee/attack actions use the game's own fixed camera |
-| `AimCamera` | `0` | EXPERIMENTAL, off: keep the mod's camera while aiming |
 | `Mode` | `Full` | the free camera's behaviour (Mode=Full it uses Speed, PitchSpeed, InvertY, Distance, Height, Shoulder, FollowPlatform and GrabCamera; AimDistance, FieldOfView and AimFieldOfView stay the game's) |
 | `RemapButtons` | `1` | 1 = the RE3 layout on the gamepad: A = interact (the game's "X" prompts show and take A; objects that keep checking the button after their prompt - held switches, co-op "push together" - also accept A held), X = reload, Back = map, L3 =... |
 | `Run` | `Toggle` | Run: Toggle (click L3 once), Hold (hold L3) or Stock (hold A, as in the original game). It runs while standing, walking, running, turning or lowering the gun/knife; in cover, on ladders, in attacks, QTEs or Wesker's dash it does nothing... |
@@ -190,7 +189,7 @@ The mod writes a fully commented `RE3Controls.ini` next to the DLL on the first 
 | Key | Default | Meaning |
 |---|---|---|
 | `StockMeleeCamera` | `1` |  |
-| `AimCamera` | `0` |  |
+| `AimCamera` | `1` | keyboard/mouse keeps the mod's orbit camera through a plain gun aim: the orbit pitch drives the character's aim, so the view no longer jumps to the game aim camera on the press or hands its pitch offset back on the release. 0 = the game's own aim camera. Scoped aim, mounted guns and Mode=MeleeCamera stay the game's. |
 | `FreeCamera` | `1` | 1 = the right stick turns the camera around Chris/Sheva and the left stick moves relative to the camera. Raising the gun or knife from standing, walking, running or lowering the gun first turns the character to where the camera looks; in... |
 | `Speed` | `180` | 1 = the right stick turns the camera around Chris/Sheva and the left stick moves relative to the camera. Raising the gun or knife from standing, walking, running or lowering the gun first turns the character to where the camera looks |
 | `PitchSpeed` | `90` | 1 = the right stick turns the camera around Chris/Sheva and the left stick moves relative to the camera. Raising the gun or knife from standing, walking, running or lowering the gun first turns the character to where the camera looks |
@@ -228,7 +227,6 @@ The mod writes a fully commented `RE3Controls.ini` next to the DLL on the first 
 | `CrosshairSize` | `1.0` | size of that crosshair: 1.0 = the normal size, 0.5 = half, 2.0 = twice as big; 0.25 to 4 (smaller values count as 0.25, larger ones as 4; 0, a negative number or text = 1.0, so 0 does not hide it: Crosshair=0 gives the laser). Its openin... |
 | `DirectHorizontal` | `1` | horizontal crosshair aim turns the view and the body at once (stick or mouse); 0 = original arm-only aim zone |
 | `StockMeleeCamera` | `1` | gamepad aim speed, horizontal / vertical, on top of the game's own Aim Speed option: 1.0 = unchanged, 2.0 = twice as fast, 0.5 = half (0.25 to 4). Also in the sniper scope (the game still slows the aim with the zoom). The free camera has... |
-| `AimCamera` | `0` | gamepad aim speed, horizontal / vertical, on top of the game's own Aim Speed option: 1.0 = unchanged, 2.0 = twice as fast, 0.5 = half |
 | `AimSpeedX` | `1.0` | gamepad aim speed, horizontal / vertical, on top of the game's own Aim Speed option: 1.0 = unchanged, 2.0 = twice as fast, 0.5 = half |
 | `AimSpeedY` | `1.0` | gamepad aim speed, horizontal / vertical, on top of the game's own Aim Speed option: 1.0 = unchanged, 2.0 = twice as fast, 0.5 = half |
 | `AimCameraLag` | `0.15` | gamepad (crosshair or laser): how far the camera trails the aim; 1 = the original pad aim camera (about 0.14 s behind, the character can drift into the crosshair when you turn fast), 0 = no delay; 0.15 is close to the game's own mouse ai... |
