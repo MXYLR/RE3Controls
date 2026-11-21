@@ -33,20 +33,26 @@ int g_logged = 0;
 
 void __fastcall HookThinkExec(void* self, void* edx) {
     const Config& c = Cfg();
+    static uint32_t lastSelf = 0;
+    static float base[3] = {0, 0, 0};
+    static int logged = 0;
+    static uint32_t calls = 0;
     if (c.enabled && c.companionMove && self && Readable((void*)((uintptr_t)self + 0x1160), 4)) {
-        // Halve the walk timers: the AI then re-plans twice as often and keeps moving between shots.
         const uint32_t slots[3] = {kOffForwardMove, kOffMoveDir, kOffMoveBack};
-        float base[3] = {0, 0, 0};
-        for (int i = 0; i < 3; ++i) {
-            float& v = re5::At<float>((uint32_t)(uintptr_t)self, slots[i]);
-            if (i == 0) base[0] = v;
-            if (v > 0.02f) v *= 0.5f;
+        if (lastSelf != (uint32_t)(uintptr_t)self) {
+            // New think object (level load, difficulty change): remember its stock values once.
+            lastSelf = (uint32_t)(uintptr_t)self;
+            for (int i = 0; i < 3; ++i) base[i] = re5::At<float>(lastSelf, slots[i]);
+            logged = 0;
+            Log("companion: think %08X base fwd %.2f dir %.2f back %.2f", lastSelf, base[0], base[1], base[2]);
         }
-        if (g_logged < 4) {
-            ++g_logged;
-            Log("companion: think tuned (fwd %.2f dir %.2f back %.2f)", base[0],
-                re5::At<float>((uint32_t)(uintptr_t)self, kOffMoveDir),
-                re5::At<float>((uint32_t)(uintptr_t)self, kOffMoveBack));
+        // Absolute write from the remembered base: scaling every frame would decay the values to zero.
+        const float scale = c.companionMoveScale > 0.05f ? c.companionMoveScale : 0.5f;
+        for (int i = 0; i < 3; ++i) re5::At<float>(lastSelf, slots[i]) = base[i] * scale;
+        if ((++calls % 600) == 1) {
+            Log("companion: think calls=%u fwd %.2f dir %.2f back %.2f scale %.2f", calls,
+                re5::At<float>(lastSelf, slots[0]), re5::At<float>(lastSelf, slots[1]),
+                re5::At<float>(lastSelf, slots[2]), scale);
         }
     }
     if (oThinkExec) oThinkExec(self, edx);

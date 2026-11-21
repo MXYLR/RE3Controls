@@ -147,6 +147,7 @@ aim-walk path), and the **quick slash can be moved and steered** - the engine's 
 | The **character never raises the gun by itself**: the ready bit is written only when the player aims | older builds forced the ready state during a throw and after a reaction |
 | Being hit does **not** trigger a reload or an aim | older builds re-sent the latched keys after a reaction |
 | The thrown item is left entirely to the game: the character stands still and does not twitch during the recovery | older builds fought the throw animation |
+| **Strict QTE prompts are left alone**: while one is up the mod does not rewrite the pad or take the camera, so the game's own QTE check sees the button it waits for | the button rewrite could hide the key the QTE waits for |
 
 ### Known engine limits (not mod bugs)
 
@@ -254,6 +255,13 @@ The mod writes a fully commented `RE3Controls.ini` next to the DLL on the first 
 | `AimPitchFromMouse` | `0` | walking and running speed outside the aim: 1.0 = the original game |
 | `MoveWalkSpeed` | `1.0` | walking and running speed outside the aim: 1.0 = the original game |
 | `MoveRunSpeed` | `1.0` | walking and running speed outside the aim: 1.0 = the original game |
+
+### [Characters]
+
+| Key | Default | Meaning |
+|---|---|---|
+| `CompanionMove` | `0` | EXPERIMENTAL, off: shorten the partner AI's movement timers so it repositions while shooting |
+| `CompanionMoveScale` | `0.5` | multiplier for those timers, 0.1 - 1.0 (smaller = repositions more) |
 
 ### [Visual]
 

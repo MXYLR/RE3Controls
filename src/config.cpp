@@ -186,15 +186,19 @@ static const char kDefaultIni[] =
     "[Movement]\r\n"
     "; EXPERIMENTAL, off: the mod replaces the native walk/run/back updates so it owns the step\r\n"
     "EngineMove=0\r\n"
-          "; EXPERIMENTAL, off: shorten the partner AI movement timers so it repositions while shooting\r\n"
-          "CompanionMove=0\r\n"
+
     "\r\n"
     "; Walking / running speed outside of aiming\r\n"
     "          MoveWalkSpeed=1.0\r\n"
     "          MoveRunSpeed=1.0\r\n"
     "\r\n"
     "\r\n"
-    "[Visual]\r\n"
+    "[Characters]\r\n"
+  "; EXPERIMENTAL, off: shorten the partner AI movement timers so it repositions while shooting\r\n"
+  "CompanionMove=0\r\n"
+  "; multiplier for those timers, 0.1 - 1.0 (smaller = repositions more)\r\n"
+  "CompanionMoveScale=0.5\r\n"
+  "[Visual]\r\n"
     "\r\n"
     "; Remove the yellow colour tint of the levels\r\n"
     "          NoColorFilter=1\r\n"
@@ -441,6 +445,7 @@ void LoadConfig() {
     c.laserRgb = GetBool(path, "Aim", "LaserRGB", c.laserRgb);
     c.engineMove = GetBool(path, "Movement", "EngineMove", c.engineMove);
     c.companionMove = GetBool(path, "Characters", "CompanionMove", c.companionMove);
+    c.companionMoveScale = GetScale(path, "Characters", "CompanionMoveScale", 0.1f, 1.0f);
     c.moveWalk = GetScale(path, "Movement", "MoveWalkSpeed", 0.5f, 2.0f);
     c.moveRun = GetScale(path, "Movement", "MoveRunSpeed", 0.5f, 2.0f);
     c.noColorFilter = GetBool(path, "Visual", "NoColorFilter", c.noColorFilter);

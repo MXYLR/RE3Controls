@@ -423,8 +423,9 @@ bool AimCameraRay(float eye[3], float dir[3]) {
 static bool g_lastAimRig[4] = {};
 static int g_aimSeedFrames[4] = {};
 // One compact line per aim (start, ~0.35 s in, end) with every field the aim could follow, so a single aim with the
-// mouse moved up and down shows which one tracks the camera: camPitch = the view the player sees, shotY = the point the
-// game aims/ shoots at (ch+0x2700), aim8/aimC = the two character angles, lookV = the game's vertical look channel.
+// mouse moved up and down shows which one tracks the camera: camPitch = the game's aim camera pitch, orbit = the
+// orbit's pitch (what the player actually sees with AimCamera), shotY = the point the game aims/shoots at
+// (ch+0x2700), aim8/aimC = the two character angles, lookV = the game's vertical look channel.
 static void AimTrace(uint32_t self, int idx, const char* when) {
     const uint32_t ch = At<uint32_t>(self, cam::Parent);
     const float* eye = (const float*)(self + cam::EyeAim);
@@ -432,6 +433,7 @@ static void AimTrace(uint32_t self, int idx, const char* when) {
     const float dx = tgt[0] - eye[0], dz = tgt[2] - eye[2];
     const float len = sqrtf(dx * dx + dz * dz);
     const float camPitch = len > 0.001f ? atan2f(eye[1] - tgt[1], len) * 57.3f : 0.0f;
+    const float orbitPitch = idx >= 0 ? g_cams[idx].pitch * 57.3f : 0.0f;
     float a8 = 0.0f, aC = 0.0f, shotY = 0.0f, rayY = 0.0f;
     if (ch && Readable((void*)ch, 0x3000)) {
         a8 = At<float>(ch, 0x2908) * 57.3f;
@@ -439,8 +441,8 @@ static void AimTrace(uint32_t self, int idx, const char* when) {
         shotY = At<float>(ch, 0x2704);
         rayY = At<float>(ch, 0x2894);
     }
-    Log("aimtrace[%s] camPitch=%+.1f lookV=%+.2f aim8=%+.1f aimC=%+.1f shotY=%+.0f rayY=%+.0f",
-        when, camPitch, At<float>(self, cam::LookV), a8, aC, shotY, rayY);
+    Log("aimtrace[%s] camPitch=%+.1f orbit=%+.1f lookV=%+.2f aim8=%+.1f aimC=%+.1f shotY=%+.0f rayY=%+.0f",
+        when, camPitch, orbitPitch, At<float>(self, cam::LookV), a8, aC, shotY, rayY);
 }
 
 // AI companion: the engine suppresses locomotion while it fires (action 0x1E) or uses an item, so the companion stands
@@ -569,7 +571,18 @@ static void __fastcall HookQfpsUpdate(uint32_t self, void* edx, uint32_t arg) {
         // is skipped while +0x2A0 is 0.
         lookEnabled = At<uint8_t>(self, cam::LookEnabled);
         At<uint8_t>(self, cam::LookEnabled) = 0;
-        At<float>(self, cam::LookV) = 0.0f;
+        if (At<uint8_t>(self, cam::AimRig) == 1) {
+            // Exactly what the scope does (game.cpp): only the character's own aim angles are carried, the
+            // game's look channel is left alone.  Writing LookV on top of the angles was the constant offset -
+            // the two are on different scales.
+            const uint32_t chS = At<uint32_t>(self, cam::Parent);
+            if (chS && Readable((void*)chS, 0x3000)) {
+                At<float>(chS, 0x2908) = fc.pitch;
+                At<float>(chS, 0x290C) = fc.pitch;
+            }
+        } else {
+            At<float>(self, cam::LookV) = 0.0f;
+        }
         At<float>(self, cam::LookH) = 0.0f;
     }
     PoseMirror mirror;
@@ -677,7 +690,10 @@ static void __fastcall HookQfpsUpdate(uint32_t self, void* edx, uint32_t arg) {
         } else if (g_lastAimRig[idx]) {
             AimTrace(self, idx, "out");
         }
-        g_lastAimRig[idx] = rigNow;
+        // g_lastAimRig is updated once, further down, after the game's camera update: the "adopt the pitch the aim
+        // ended on" step has to see that the PREVIOUS frame was still aiming.  Updating it here as well set it to
+        // this frame's value before that step read it, so the adopt could never run -- every aim handed the view
+        // back at the pre-aim pitch, which is the "the camera resets when I aim" report.
     }
     // The old post-update seed of ch+0x2908/+0x290C is gone.  Those are NOT the aim pitch: when they were written the
     // values accumulated (+91.7, +103.1 deg), i.e. they are angles that the game keeps adding to, and writing them for
@@ -721,7 +737,10 @@ static void __fastcall HookQfpsUpdate(uint32_t self, void* edx, uint32_t arg) {
     // had before the aim (the "camera returns to the angle I set" report) after the player had aimed somewhere else.
     {
         const bool rigNow = At<uint8_t>(self, cam::AimRig) == 1;
-        if (!rigNow && g_lastAimRig[idx]) {
+        // Only when the game owned the aim view.  With AimCamera the orbit WAS the aim camera and there is nothing
+        // to adopt; taking the game aim camera's pitch here is what put its fixed few-degree offset back into the
+        // view the moment the aim ended.
+        if (!rigNow && g_lastAimRig[idx] && !o.lastOwn) {
             const float len0 = sqrtf(dx * dx + dz * dz);
             if (len0 > 0.001f) {
                 float p = atan2f(eye[1] - tgt[1], len0);
@@ -817,7 +836,8 @@ static void __fastcall HookQfpsUpdate(uint32_t self, void* edx, uint32_t arg) {
                 fc.pitch += d;
                 if (fc.pitch > Rad(55.0f)) fc.pitch = Rad(55.0f);
                 if (fc.pitch < Rad(-40.0f)) fc.pitch = Rad(-40.0f);
-                At<float>(self, cam::LookV) = -fc.pitch / Rad(55.0f);
+                if (At<uint8_t>(self, cam::AimRig) != 1)
+                    At<float>(self, cam::LookV) = -fc.pitch / Rad(55.0f);
                 g_aimPitchLast = fc.pitch;
             } else if (len > 10.0f) {
                 float vp = atan2f(eye[1] - tgt[1], len);

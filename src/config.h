@@ -33,6 +33,7 @@ struct Config {
     bool grabCamera = true;         // enemy grabs keep the normal camera (no grab cinematic), right stick turns it
     bool meleeOnly = false;         // Mode=MeleeCamera: only the melee camera, everything else as in the original game
     bool companionMove = false;  // EXPERIMENTAL: shorten the partner AI's movement timers so it moves while shooting
+    float companionMoveScale = 0.5f;  // how much of its movement the shooting companion keeps
     bool engineMove = false;     // EXPERIMENTAL: the mod takes over the native locomotion entries
     bool gunWalk = true;            // walk while aiming a gun
     bool scopeWalk = true;          // walk in the sniper / rocket launcher scope (zoom on RB + left stick)

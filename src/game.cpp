@@ -444,6 +444,16 @@ static bool QuickTurnStance(uint32_t character, uint32_t action, uint32_t id) {
     return InLocomotion(character) || action == plact::ReadyEnd || id == aid::KnifeEnd || id == 0x21;
 }
 
+// Strict QTE prompts are answered by the game itself; while one is up the mod leaves the pad it reads untouched,
+// otherwise its button rewrite can hide the button the QTE waits for.
+static DWORD g_qteUntil[4] = {};
+static bool QteActive(uint32_t slot) {
+    return slot < 4 && g_qteUntil[slot] != 0 && (int32_t)(g_qteUntil[slot] - GetTickCount()) > 0;
+}
+static bool QteScene(uint32_t character) {
+    return character && Readable((void*)character, 0x10) && At<uint32_t>(character, ch::ActionId) == 0x80000000u;
+}
+
 static void ApplyControls(uint32_t padObj, uint32_t character) {
     const Config& c = Cfg();
     const uint32_t padIndex = At<uint32_t>(padObj, pp::PadIndex);
@@ -643,7 +653,7 @@ static void ApplyControls(uint32_t padObj, uint32_t character) {
     Bridge()->reserved[6] = (keyboard ? 1u : 0u) | (fc.active ? 2u : 0u) |
                             (IsMeleeAction(At<uint32_t>(character, ch::ActionId)) ? 4u : 0u) | (fc.leftShoulder ? 8u : 0u);
 #endif
-    if ((keyboard && !kbm) || mounted || InventoryOpen(character)) {
+    if ((keyboard && !kbm) || mounted || InventoryOpen(character) || QteActive(slot) || QteScene(character)) {
         const bool invMove = !mounted && (!keyboard || kbm) && c.inventoryMove && !c.meleeOnly && InventoryMoveReady() &&
                              InventoryOpen(character);
         KbSetDriving(slot, kbm && invMove, true, true, freeCam && fc.initialised);
@@ -664,7 +674,7 @@ static void ApplyControls(uint32_t padObj, uint32_t character) {
         S.gunAim = false;
         S.character = character;
         fc.noAimRig = false;  // in the inventory fc.active and fc.yaw stay: the camera keeps its place
-        if ((keyboard && !kbm) || mounted) {
+        if ((keyboard && !kbm) || mounted || QteActive(slot) || QteScene(character)) {
             fc.active = false;
             fc.charLeft = false; fc.leftShoulder = false; fc.mirrorAim = false;  // the game's own cameras must not stay mirrored
         }
@@ -945,7 +955,15 @@ static void ApplyControls(uint32_t padObj, uint32_t character) {
         // camera for the swing, so NOBODY drove the view and the mouse did nothing at all during the slash.  While
         // such an action runs, let the orbit own the view (it is the camera the mod already shows in the melee).
         const bool camFreeAction = FreeCameraAction(character);
-        fc.active = !busy || devOrbit || camFreeAction;
+        // AimCamera on keyboard/mouse: the orbit keeps the view through a plain gun aim.  The game's aim camera is a
+        // separate camera whose pitch sits a few degrees above the character's aim line (measured: 1-6.6 degrees,
+        // more the flatter the aim), so handing the view over on every press is the "the view resets when I aim"
+        // jump, and taking its pitch back on the release was the offset that followed.  The orbit camera's pitch is
+        // written into the character's aim state every frame (camera.cpp), so the gun and the shots follow it.  The
+        // scope, mounted guns and Mode=MeleeCamera stay the game's.
+        const bool scopedAim = At<uint8_t>(character, ch::Scope) != 0;
+        const bool aimOwnsView = aiming && c.aimCamera && kbm && !mounted && !scopedAim && !dash;
+        fc.active = !busy || devOrbit || camFreeAction || aimOwnsView;
         // While the mod owns the view during an attack, the aim rig must go too.  camera.cpp only lets the orbit run
         // when cam::AimRig == 0; a knife thrown from an aim hold (KnifeFromGun) keeps the rig set, so the orbit was
         // skipped even though the action camera had been suppressed -- nobody updated the view and the mouse did
@@ -953,13 +971,15 @@ static void ApplyControls(uint32_t padObj, uint32_t character) {
         // for a reload on the move.
         fc.noAimRig = reloadMove || changeMove || devOrbit || camFreeAction;
         // Diagnostic: log every entry/exit of "the mod owns the view during an action" with the real action id, so
-        // one playthrough shows which id the knife uses and whether the orbit took the camera.
+        // one playthrough shows which id the knife uses and whether the orbit took the camera.  MOD-AIM is the
+        // AimCamera hand-off: one line on the aim press, one when the view goes back, and nothing in between.
         {
-            static int lastCamFree = -1;
-            const int nowFree = camFreeAction ? 1 : 0;
-            if (nowFree != lastCamFree) {
-                lastCamFree = nowFree;
-                Log("camera owner -> %s (action %02X busy=%d active=%d)", nowFree ? "MOD" : "GAME",
+            static int lastOwner = -1;
+            const int owner = aimOwnsView ? 2 : camFreeAction ? 1 : 0;
+            if (owner != lastOwner) {
+                lastOwner = owner;
+                Log("camera owner -> %s (action %02X busy=%d active=%d)",
+                    owner == 2 ? "MOD-AIM" : owner == 1 ? "MOD" : "DEFAULT",
                     (unsigned)At<uint32_t>(character, ch::ActionId), (int)busy, (int)fc.active);
             }
         }
@@ -968,8 +988,9 @@ static void ApplyControls(uint32_t padObj, uint32_t character) {
         // (it no longer zeroes the game's mouse turn while scoped).  Everything the mod used to inject here -- the
         // orbit pitch drive, the lookV write in the controller hook -- is gone: two drivers fighting the stock one
         // is what kept the scope from following in the first place.
-        if (busy && camFreeAction) {
-            // Camera-only turn during the swing: the movement/steering part of the !busy block below must not run.
+        if (busy && (camFreeAction || aimOwnsView)) {
+            // Camera-only turn while the mod owns a "busy" view (an attack swing, or the aim with AimCamera): the
+            // movement/steering part of the !busy block below must not run.
             if (kbm) {
                 if (!JustActivated()) {
                     const float k = MouseUnitRadians() * c.mouseSensitivity;
@@ -1038,8 +1059,8 @@ static void ApplyControls(uint32_t padObj, uint32_t character) {
     const uint32_t aidSt = At<uint32_t>(character, ch::ActionId);
     const bool knifeSt = (aidSt >= aid::KnifeBegin && aidSt <= aid::KnifeAttack);
     const bool moveSteer = ((reloadMove || action == plact::Reload) && c.reloadWalk && action == plact::Reload) ||
-                           changeMove;
-                           ((action == plact::ReadyEnd || action == plact::Fire) && !aimHeld) || changeMove;
+                           changeMove ||
+                           ((action == plact::ReadyEnd || action == plact::Fire) && !aimHeld);
             if (stickMag >= 0.3f && fc.initialised && S.quickTurnT < 0 && (InLocomotion(character) || moveSteer || knifeSt)) {
                 // BackStep: toward the camera without running steps back, facing where the camera looks (the game's
                 // own walk back), as in the original game; a reload or switch on the move steps back too. A counts
@@ -1690,6 +1711,8 @@ static bool __fastcall HookActionCheck(uint32_t self, void* edx, uint32_t pad, u
 #endif
         }
     }
+    if (req && Readable((void*)req, 0x80) && slot < 4 && At<uint8_t>(req, act::ReqStrict) != 0)
+        g_qteUntil[slot] = GetTickCount() + 3000u;
     return oActionCheck(self, edx, pad, slot);
 }
 
